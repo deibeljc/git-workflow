@@ -95,12 +95,11 @@ fn sync_specific_stack() {
 
     repo.git(&["checkout", &main_branch]);
 
-    // Sync only auth stack
+    // Sync only auth stack (no merges, so no rebase happens)
     gw_cmd(&repo.path)
         .args(["sync", "--stack", "auth"])
         .assert()
-        .success()
-        .stdout(predicate::str::contains("auth"));
+        .success();
 }
 
 #[test]
@@ -172,7 +171,7 @@ fn sync_detects_merge_via_tree_comparison() {
 // ============================================================
 
 #[test]
-fn sync_rebases_stack_onto_updated_base() {
+fn sync_without_merge_does_not_rebase() {
     let repo = TestRepo::new();
     let main_branch = repo.current_branch();
 
@@ -190,13 +189,13 @@ fn sync_rebases_stack_onto_updated_base() {
 
     repo.git(&["checkout", "feature"]);
 
-    // Sync should rebase feature onto updated main
+    // Sync should NOT rebase since nothing was merged. The stack stays
+    // pinned so the root branch doesn't diverge from its remote PR.
     gw_cmd(&repo.path)
         .args(["sync"])
         .assert()
-        .success()
-        .stdout(predicate::str::contains("synced"));
+        .success();
 
     let post_sha = repo.git(&["rev-parse", "feature"]);
-    assert_ne!(pre_sha, post_sha, "feature should be rebased onto updated main");
+    assert_eq!(pre_sha, post_sha, "feature should NOT be rebased when nothing was merged");
 }
