@@ -105,8 +105,8 @@ fn tree_highlights_current_branch() {
     let output = gw_cmd(&repo.path).args(["tree"]).output().unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
 
-    // Current branch marker
-    assert!(stdout.contains("●"), "should have current branch indicator: {stdout}");
+    // Current branch marker (@ in jj style)
+    assert!(stdout.contains("@"), "should have current branch indicator: {stdout}");
 }
 
 #[test]
