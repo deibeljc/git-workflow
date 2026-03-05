@@ -15,7 +15,7 @@ fn main() -> Result<()> {
         let allowed = matches!(
             &cli.command,
             Commands::Rebase(args) if args.cont || args.abort
-        ) || matches!(&cli.command, Commands::Tree);
+        ) || matches!(&cli.command, Commands::Tree(_));
 
         if !allowed {
             let op = match prop_state.operation {
@@ -39,7 +39,7 @@ fn main() -> Result<()> {
         Commands::Rebase(args) => commands::rebase::run(args, &ctx),
         Commands::Sync(args) => commands::sync::run(args, &ctx),
         Commands::Push(args) => commands::push::run(args, &ctx),
-        Commands::Tree => commands::tree::run(&ctx),
+        Commands::Tree(args) => commands::tree::run(&ctx, args.pr),
         Commands::Config(args) => commands::config::run(args.command, &ctx),
     }
 }

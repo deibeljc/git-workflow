@@ -24,7 +24,7 @@ pub enum Commands {
     /// Push the current branch
     Push(PushArgs),
     /// Show tree visualization of all stacks
-    Tree,
+    Tree(TreeArgs),
     /// Configure gw settings
     Config(ConfigArgs),
 }
@@ -129,6 +129,15 @@ pub struct PushArgs {
     /// Skip confirmation prompt for force push
     #[arg(long)]
     pub yes: bool,
+}
+
+// -- Tree --
+
+#[derive(Args)]
+pub struct TreeArgs {
+    /// Show PR status from GitHub (requires gh CLI, adds latency)
+    #[arg(long)]
+    pub pr: bool,
 }
 
 // -- Config --
