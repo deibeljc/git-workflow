@@ -1,6 +1,6 @@
 use anyhow::Result;
 use colored::Colorize;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::context::Ctx;
 use crate::ui;
@@ -24,80 +24,105 @@ pub fn run(ctx: &Ctx) -> Result<()> {
             println!();
         }
 
-        // Print base branch
-        println!("{}", stack.base_branch.dimmed());
-
         let branch_count = stack.branches.len();
+
         for (idx, branch) in stack.branches.iter().enumerate() {
-            let is_last = idx == branch_count - 1;
+            let is_last_branch = idx == branch_count - 1;
             let is_current = branch.name == current_branch;
             let is_root = idx == 0;
             let exists = all_branches.contains(&branch.name);
 
-            // Tree connector
-            let connector = if is_last { "└── " } else { "├── " };
-
-            // Build the branch display
-            let mut parts: Vec<String> = vec![];
-
-            // Branch name (highlighted if current)
-            if is_current {
-                parts.push(format!("{}", branch.name.green().bold()));
-            } else if !exists {
-                parts.push(format!("{}", branch.name.red().strikethrough()));
+            // === Branch line ===
+            let connector = if is_root {
+                // Root connects from base
+                format!("{} → ", stack.base_branch.dimmed())
             } else {
-                parts.push(branch.name.clone());
-            }
+                "  → ".to_string()
+            };
 
-            // Role markers
-            if is_root {
-                parts.push("(root)".dimmed().to_string());
-            }
+            let mut name_display = if is_current {
+                format!("{}", branch.name.green().bold())
+            } else if !exists {
+                format!("{}", branch.name.red().strikethrough())
+            } else {
+                format!("{}", branch.name.white().bold())
+            };
+
             if is_current {
-                parts.push("*".green().bold().to_string());
+                name_display = format!("{name_display} {}", "●".green());
             }
 
-            // PR status
+            // Annotations after the name
+            let mut annotations: Vec<String> = vec![];
+
+            if is_root {
+                annotations.push("root".dimmed().to_string());
+            }
+
             if let Some(status) = pr_status.get(&branch.name) {
-                parts.push(format!("← {}", status.cyan()));
+                annotations.push(status.cyan().to_string());
             }
 
-            // Commit count ahead of parent
-            if exists {
-                let parent = stack.parent_of(&branch.name).unwrap_or_default();
-                if let Ok(count) = ctx.git.commit_count_between(&parent, &branch.name) {
-                    if count > 0 {
-                        let label = format!(
-                            "{count} commit{} ahead",
-                            if count == 1 { "" } else { "s" }
-                        );
-                        parts.push(label.dimmed().to_string());
-                    }
-                }
-            }
-
-            // Remote status
             if exists {
                 if let Ok(diverged) = ctx.git.has_diverged_from_remote(&branch.name) {
                     if diverged {
-                        parts.push("[diverged]".yellow().to_string());
+                        annotations.push("diverged".yellow().to_string());
                     }
                 }
-                // Check if ahead of remote (needs push)
-                if let Ok(needs_push) = check_needs_push(ctx, &branch.name) {
-                    if needs_push {
-                        parts.push("[needs push]".yellow().to_string());
-                    }
+                if let Ok(true) = check_needs_push(ctx, &branch.name) {
+                    annotations.push("needs push".yellow().to_string());
                 }
             }
 
             if !exists {
-                parts.push("[missing]".red().to_string());
+                annotations.push("missing".red().to_string());
             }
 
-            // Print with indentation based on position
-            let indent = "    ".repeat(idx);
-            println!("{indent}{connector}{}", parts.join(" "));
+            let suffix = if annotations.is_empty() {
+                String::new()
+            } else {
+                format!(" {}", annotations.join(" · "))
+            };
+
+            println!("{connector}{name_display}{suffix}");
+
+            // === Commit lines (sub-items of the branch) ===
+            if exists {
+                let parent = stack.parent_of(&branch.name).unwrap_or_default();
+                if let Ok(commits) = ctx.git.log_oneline(&parent, &branch.name, 10) {
+                    let commit_count = commits.len();
+                    let pipe = if is_last_branch { " " } else { "│" };
+
+                    for (ci, (sha, subject)) in commits.iter().enumerate() {
+                        let is_last_commit = ci == commit_count - 1;
+                        let commit_connector = if is_last_commit { "╰─" } else { "├─" };
+
+                        // Indent to align under the branch name
+                        let indent = if is_root {
+                            // Account for "base → " prefix width
+                            " ".repeat(stack.base_branch.len() + 3)
+                        } else {
+                            "    ".to_string()
+                        };
+
+                        println!(
+                            "{indent}{pipe} {commit_connector} {} {}",
+                            sha.yellow(),
+                            subject.dimmed()
+                        );
+                    }
+
+                    // Spacing line between branches (if not last)
+                    if !is_last_branch && commit_count > 0 {
+                        let indent = if is_root {
+                            " ".repeat(stack.base_branch.len() + 3)
+                        } else {
+                            "    ".to_string()
+                        };
+                        println!("{indent}│");
+                    }
+                }
+            }
         }
     }
 
@@ -127,12 +152,10 @@ fn check_needs_push(ctx: &Ctx, branch: &str) -> Result<bool> {
         return Ok(false);
     }
 
-    // Check if local is ahead (remote is ancestor of local)
     ctx.git.is_ancestor(&remote_sha, &local_sha)
 }
 
 /// Batch-fetch PR status via a single gh CLI call.
-/// Returns a map of branch_name -> PR status string.
 fn batch_pr_status() -> HashMap<String, String> {
     let mut result = HashMap::new();
 
@@ -151,13 +174,11 @@ fn batch_pr_status() -> HashMap<String, String> {
 
     let output = match output {
         Ok(o) if o.status.success() => o,
-        _ => return result, // gh not available, return empty
+        _ => return result,
     };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    // Simple JSON parsing without pulling in serde_json
-    // Format: [{"headRefName":"branch","number":42,"state":"OPEN"}, ...]
     for line in stdout.split('{') {
         if let (Some(branch), Some(number), Some(state)) = (
             extract_json_string(line, "headRefName"),
@@ -187,6 +208,9 @@ fn extract_json_string(text: &str, key: &str) -> Option<String> {
 fn extract_json_number(text: &str, key: &str) -> Option<u64> {
     let pattern = format!("\"{key}\":");
     let start = text.find(&pattern)? + pattern.len();
-    let num_str: String = text[start..].chars().take_while(|c| c.is_ascii_digit()).collect();
+    let num_str: String = text[start..]
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
     num_str.parse().ok()
 }

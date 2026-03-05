@@ -237,6 +237,27 @@ impl Git {
             .with_context(|| format!("failed to parse commit count: '{output}'"))
     }
 
+    /// Get commits between base and head as (short_sha, subject) pairs.
+    pub fn log_oneline(&self, base: &str, head: &str, limit: usize) -> Result<Vec<(String, String)>> {
+        let output = self.run(&[
+            "log",
+            "--oneline",
+            "--format=%h %s",
+            &format!("--max-count={limit}"),
+            &format!("{base}..{head}"),
+        ])?;
+        if output.is_empty() {
+            return Ok(vec![]);
+        }
+        Ok(output
+            .lines()
+            .map(|line| {
+                let (sha, subject) = line.split_once(' ').unwrap_or((line, ""));
+                (sha.to_string(), subject.to_string())
+            })
+            .collect())
+    }
+
     /// Push a branch to origin.
     pub fn push(&self, branch: &str) -> Result<()> {
         self.run(&["push", "origin", branch])?;

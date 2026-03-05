@@ -1,17 +1,9 @@
-mod cli;
-mod commands;
-mod context;
-mod git;
-mod propagation;
-mod state;
-mod ui;
-mod validate;
-
 use anyhow::Result;
 use clap::Parser;
 
-use cli::{Cli, Commands};
-use context::Ctx;
+use gw::cli::{Cli, Commands};
+use gw::context::Ctx;
+use gw::{commands, state, ui};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();

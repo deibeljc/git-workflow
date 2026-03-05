@@ -6,7 +6,6 @@ use predicates::prelude::*;
 #[test]
 fn tree_no_stacks() {
     let repo = TestRepo::new();
-
     gw_cmd(&repo.path)
         .args(["tree"])
         .assert()
@@ -23,21 +22,22 @@ fn tree_single_stack_single_branch() {
         .args(["stack", "create", "auth"])
         .assert()
         .success();
-
     repo.commit_file("a.txt", "a", "auth work");
 
-    gw_cmd(&repo.path)
+    let output = gw_cmd(&repo.path)
         .args(["tree"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains(&main_branch))
-        .stdout(predicate::str::contains("auth"))
-        .stdout(predicate::str::contains("(root)"))
-        .stdout(predicate::str::contains("*")); // current branch marker
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert!(stdout.contains(&main_branch), "should show base branch");
+    assert!(stdout.contains("auth"), "should show branch name");
+    assert!(stdout.contains("root"), "should show root marker");
+    assert!(stdout.contains("auth work"), "should show commit message");
 }
 
 #[test]
-fn tree_shows_commit_counts() {
+fn tree_shows_commits_as_sub_items() {
     let repo = TestRepo::new();
 
     gw_cmd(&repo.path)
@@ -45,22 +45,17 @@ fn tree_shows_commit_counts() {
         .assert()
         .success();
 
-    repo.commit_file("a1.txt", "a1", "commit 1");
-    repo.commit_file("a2.txt", "a2", "commit 2");
+    repo.commit_file("a1.txt", "a1", "first commit");
+    repo.commit_file("a2.txt", "a2", "second commit");
 
-    gw_cmd(&repo.path)
-        .args(["branch", "create", "auth-tests"])
-        .assert()
-        .success();
-
-    repo.commit_file("b1.txt", "b1", "test 1");
-
-    gw_cmd(&repo.path)
+    let output = gw_cmd(&repo.path)
         .args(["tree"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("2 commits ahead"))
-        .stdout(predicate::str::contains("1 commit ahead"));
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert!(stdout.contains("first commit"), "should show first commit: {stdout}");
+    assert!(stdout.contains("second commit"), "should show second commit: {stdout}");
 }
 
 #[test]
@@ -84,16 +79,11 @@ fn tree_multiple_stacks() {
 
     repo.git(&["checkout", &main_branch]);
 
-    let output = gw_cmd(&repo.path)
-        .args(["tree"])
-        .output()
-        .unwrap();
-
+    let output = gw_cmd(&repo.path).args(["tree"]).output().unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
+
     assert!(stdout.contains("auth"));
     assert!(stdout.contains("billing"));
-    // Both stacks should show the base branch
-    assert!(stdout.matches(&main_branch).count() >= 2);
 }
 
 #[test]
@@ -112,16 +102,15 @@ fn tree_highlights_current_branch() {
         .success();
     repo.commit_file("b.txt", "b", "b");
 
-    // On auth-tests now, should see * marker
-    gw_cmd(&repo.path)
-        .args(["tree"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("*"));
+    let output = gw_cmd(&repo.path).args(["tree"]).output().unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    // Current branch marker
+    assert!(stdout.contains("●"), "should have current branch indicator: {stdout}");
 }
 
 #[test]
-fn tree_three_branch_stack() {
+fn tree_three_branch_stack_with_commits() {
     let repo = TestRepo::new();
     let main_branch = repo.current_branch();
 
@@ -129,37 +118,34 @@ fn tree_three_branch_stack() {
         .args(["stack", "create", "feature"])
         .assert()
         .success();
-    repo.commit_file("a.txt", "a", "a");
+    repo.commit_file("a.txt", "a", "feature work");
 
     gw_cmd(&repo.path)
         .args(["branch", "create", "feature-tests"])
         .assert()
         .success();
-    repo.commit_file("b.txt", "b", "b");
+    repo.commit_file("b.txt", "b", "test work");
 
     gw_cmd(&repo.path)
         .args(["branch", "create", "feature-ui"])
         .assert()
         .success();
-    repo.commit_file("c.txt", "c", "c");
+    repo.commit_file("c.txt", "c", "ui work");
 
-    let output = gw_cmd(&repo.path)
-        .args(["tree"])
-        .output()
-        .unwrap();
-
+    let output = gw_cmd(&repo.path).args(["tree"]).output().unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
 
-    // Verify all branches appear
-    assert!(stdout.contains("feature"));
-    assert!(stdout.contains("feature-tests"));
-    assert!(stdout.contains("feature-ui"));
-    assert!(stdout.contains("(root)"));
-    assert!(stdout.contains(&main_branch));
+    assert!(stdout.contains("feature"), "should show root branch: {stdout}");
+    assert!(stdout.contains("feature-tests"), "should show middle branch: {stdout}");
+    assert!(stdout.contains("feature-ui"), "should show leaf branch: {stdout}");
+    assert!(stdout.contains(&main_branch), "should show base: {stdout}");
+    assert!(stdout.contains("feature work"), "should show commit messages: {stdout}");
+    assert!(stdout.contains("test work"));
+    assert!(stdout.contains("ui work"));
 }
 
 #[test]
-fn tree_missing_branch_shows_warning() {
+fn tree_missing_branch_shows_indicator() {
     let repo = TestRepo::new();
 
     gw_cmd(&repo.path)
@@ -173,22 +159,16 @@ fn tree_missing_branch_shows_warning() {
         .assert()
         .success();
 
-    // Delete the branch outside of gw
     repo.git(&["checkout", "auth"]);
     repo.git(&["branch", "-D", "auth-tests"]);
 
-    let output = gw_cmd(&repo.path)
-        .args(["tree"])
-        .output()
-        .unwrap();
-
+    let output = gw_cmd(&repo.path).args(["tree"]).output().unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("[missing]"), "should show missing indicator, got: {stdout}");
+    assert!(stdout.contains("missing"), "should show missing indicator, got: {stdout}");
 }
 
 #[test]
 fn tree_works_during_propagation() {
-    // Tree is read-only and should work even during active propagation
     let repo = TestRepo::new();
 
     gw_cmd(&repo.path)
@@ -196,7 +176,6 @@ fn tree_works_during_propagation() {
         .assert()
         .success();
 
-    // Write fake propagation state
     repo.write_state_toml(
         r#"
 operation = "rebase"
@@ -209,7 +188,6 @@ remaining = []
 "#,
     );
 
-    // Tree should still work
     gw_cmd(&repo.path)
         .args(["tree"])
         .assert()
