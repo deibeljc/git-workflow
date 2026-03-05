@@ -98,8 +98,10 @@ pub fn run(args: SyncArgs, ctx: &Ctx) -> Result<()> {
             ctx.save_stack(&stack)?;
         }
 
-        // Rebase remaining stack onto the updated base
-        if !stack.branches.is_empty() {
+        // Only rebase if a branch was merged and removed. If nothing was merged,
+        // the stack stays pinned to its current base commit so the root branch
+        // doesn't diverge from its remote (which would force-push an open PR).
+        if merged_any && !stack.branches.is_empty() {
             let branches: Vec<String> =
                 stack.branches.iter().map(|b| b.name.clone()).collect();
 
