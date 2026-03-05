@@ -41,5 +41,6 @@ fn main() -> Result<()> {
         Commands::Sync(args) => commands::sync::run(args, &ctx),
         Commands::Push(args) => commands::push::run(args, &ctx),
         Commands::Tree => commands::tree::run(&ctx),
+        Commands::Config(args) => commands::config::run(args.command, &ctx),
     }
 }

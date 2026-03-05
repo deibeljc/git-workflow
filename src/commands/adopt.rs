@@ -135,8 +135,17 @@ pub fn run(args: AdoptArgs, ctx: &Ctx) -> Result<()> {
     Ok(())
 }
 
-/// Infer the base branch by computing merge-base against well-known branch names.
+/// Infer the base branch. Checks config first, then computes merge-base against well-known names.
 fn infer_base_branch(ctx: &Ctx, first_branch: &str) -> Result<String> {
+    // If a default base is configured, try that first
+    let config = ctx.load_config()?;
+    if let Some(ref configured_base) = config.default_base {
+        let existing = ctx.git.all_local_branches()?;
+        if existing.contains(configured_base) {
+            return Ok(configured_base.clone());
+        }
+    }
+
     let candidates = ["dev", "develop", "main", "master"];
     let existing = ctx.git.all_local_branches()?;
 

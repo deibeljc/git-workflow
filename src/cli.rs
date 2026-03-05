@@ -28,6 +28,8 @@ pub enum Commands {
     Push(PushArgs),
     /// Show tree visualization of all stacks
     Tree,
+    /// Configure gw settings
+    Config(ConfigArgs),
 }
 
 // -- Stack subcommands --
@@ -130,4 +132,25 @@ pub struct PushArgs {
     /// Skip confirmation prompt for force push
     #[arg(long)]
     pub yes: bool,
+}
+
+// -- Config --
+
+#[derive(Args)]
+#[command(flatten_help = true)]
+pub struct ConfigArgs {
+    #[command(subcommand)]
+    pub command: ConfigCommands,
+}
+
+#[derive(Subcommand)]
+pub enum ConfigCommands {
+    /// Set the default base branch (e.g., dev, main, master)
+    #[command(name = "set-base")]
+    SetBase {
+        /// Branch name to use as the default base
+        branch: String,
+    },
+    /// Show current configuration
+    Show,
 }

@@ -4,6 +4,31 @@ use std::path::Path;
 
 use crate::validate;
 
+/// Global gw configuration stored in .git/gw/config.toml
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct GwConfig {
+    /// Default base branch for new stacks (e.g., "dev", "main")
+    pub default_base: Option<String>,
+}
+
+/// Load gw config from a TOML file. Returns default if file doesn't exist.
+pub fn load_config(path: &Path) -> Result<GwConfig> {
+    if !path.exists() {
+        return Ok(GwConfig::default());
+    }
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read {}", path.display()))?;
+    let config: GwConfig =
+        toml::from_str(&content).with_context(|| format!("failed to parse {}", path.display()))?;
+    Ok(config)
+}
+
+/// Save gw config atomically.
+pub fn save_config(path: &Path, config: &GwConfig) -> Result<()> {
+    let content = toml::to_string_pretty(config).context("failed to serialize config")?;
+    atomic_write(path, &content)
+}
+
 /// A single branch entry in a stack. Order in the Vec defines stack position.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BranchEntry {

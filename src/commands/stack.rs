@@ -30,7 +30,7 @@ fn create(ctx: &Ctx, name: &str, base: Option<&str>) -> Result<()> {
 
     let base_branch = match base {
         Some(b) => b.to_string(),
-        None => ctx.git.current_branch()?,
+        None => ctx.default_base_branch()?,
     };
 
     let head = ctx.git.rev_parse(&format!("refs/heads/{base_branch}"))?;

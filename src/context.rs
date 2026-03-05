@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use crate::git::Git;
-use crate::state::{self, PropagationState, StackConfig};
+use crate::state::{self, GwConfig, PropagationState, StackConfig};
 
 /// Central context passed to all command handlers.
 /// Bundles the Git instance, resolved gw paths, and provides
@@ -13,6 +13,7 @@ pub struct Ctx {
     pub gw_dir: PathBuf,
     pub stacks_dir: PathBuf,
     state_path: PathBuf,
+    config_path: PathBuf,
 }
 
 impl Ctx {
@@ -22,11 +23,13 @@ impl Ctx {
         let gw_dir = git.repo_path().join(".git").join("gw");
         let stacks_dir = gw_dir.join("stacks");
         let state_path = gw_dir.join("state.toml");
+        let config_path = gw_dir.join("config.toml");
         Ok(Self {
             git,
             gw_dir,
             stacks_dir,
             state_path,
+            config_path,
         })
     }
 
@@ -140,5 +143,32 @@ impl Ctx {
             }
         }
         Ok(missing)
+    }
+
+    /// Load gw config (returns defaults if no config file exists).
+    pub fn load_config(&self) -> Result<GwConfig> {
+        state::load_config(&self.config_path)
+    }
+
+    /// Save gw config.
+    pub fn save_config(&self, config: &GwConfig) -> Result<()> {
+        self.ensure_dirs()?;
+        state::save_config(&self.config_path, config)
+    }
+
+    /// Get the default base branch from config, or infer from the repo.
+    pub fn default_base_branch(&self) -> Result<String> {
+        let config = self.load_config()?;
+        if let Some(ref base) = config.default_base {
+            return Ok(base.clone());
+        }
+        // Infer: check for common base branch names
+        let branches = self.git.all_local_branches()?;
+        for candidate in &["dev", "develop", "main", "master"] {
+            if branches.contains(*candidate) {
+                return Ok(candidate.to_string());
+            }
+        }
+        Ok(self.git.current_branch()?)
     }
 }
