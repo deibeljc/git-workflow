@@ -51,6 +51,26 @@ gw switch <branch-name>         # direct checkout
 gw adopt branch-a branch-b branch-c --base main
 ```
 
+## Conflict Resolution
+
+If `gw rebase` or `gw sync` hits a conflict:
+```bash
+# resolve conflicts in your editor
+git add <resolved files>
+gw rebase --continue            # resumes the cascade
+# OR
+gw rebase --abort               # rolls back ALL branches to pre-rebase state
+```
+
+Most commands are blocked during a propagation. Only `gw tree` and `gw switch` work.
+
+## Important Notes
+
+- `gw push` only pushes the current branch, never descendants
+- `gw sync` only rebases when a branch was actually merged (stacks stay pinned otherwise)
+- Branch names can't start with `-` (prevents git argument injection)
+- Stack metadata is in `.git/gw/stacks/<name>.toml`, propagation state in `.git/gw/state.toml`
+
 ## Build & Test
 
 ```bash
