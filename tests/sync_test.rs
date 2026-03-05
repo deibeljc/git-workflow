@@ -199,3 +199,50 @@ fn sync_without_merge_does_not_rebase() {
     let post_sha = repo.git(&["rev-parse", "feature"]);
     assert_eq!(pre_sha, post_sha, "feature should NOT be rebased when nothing was merged");
 }
+
+// ============================================================
+// gw sync after squash merge doesn't conflict on child branches
+// ============================================================
+
+#[test]
+fn sync_squash_merge_child_rebases_cleanly() {
+    let repo = TestRepo::new();
+    let main_branch = repo.current_branch();
+
+    // Create a stack: main -> feature -> feature-child
+    gw_cmd(&repo.path)
+        .args(["stack", "create", "feature"])
+        .assert()
+        .success();
+    repo.commit_file("feat.txt", "feature content", "feature work");
+
+    gw_cmd(&repo.path)
+        .args(["branch", "create", "feature-child"])
+        .assert()
+        .success();
+    repo.commit_file("child.txt", "child content", "child work");
+
+    // Squash merge feature into main (simulates GitHub squash merge)
+    simulate_squash_merge(&repo, "feature", &main_branch);
+
+    repo.git(&["checkout", "feature-child"]);
+
+    // Sync should detect the merge and rebase feature-child onto main
+    // WITHOUT conflicting, because --onto skips the already-merged commits.
+    gw_cmd(&repo.path)
+        .args(["sync", "--merged", "feature"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("'feature' was merged"))
+        .stdout(predicate::str::contains("synced"));
+
+    // feature-child should be rebased onto main and contain its own file
+    repo.git(&["checkout", "feature-child"]);
+    assert!(repo.path.join("child.txt").exists(), "child.txt should exist after rebase");
+
+    // The stack should only have feature-child left
+    let toml = repo.read_stack_toml("feature");
+    let branch_count = toml.matches("[[branches]]").count();
+    assert_eq!(branch_count, 1, "should have exactly 1 branch, got toml:\n{toml}");
+    assert!(toml.contains("name = \"feature-child\""));
+}

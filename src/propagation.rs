@@ -18,12 +18,26 @@ pub enum PropagationResult {
 ///
 /// `branches_to_rebase` are in topological order (first = child of current, last = leaf).
 /// `onto_targets[i]` is what `branches_to_rebase[i]` should be rebased onto.
+/// `upstream_overrides` optionally provides the old parent for --onto rebases (needed
+/// after squash merges where the old parent's commits are already in the target).
 pub fn start(
     ctx: &Ctx,
     operation: Operation,
     stack_name: &str,
     branches_to_rebase: &[String],
     onto_targets: &[String],
+) -> Result<PropagationResult> {
+    start_with_upstreams(ctx, operation, stack_name, branches_to_rebase, onto_targets, &[])
+}
+
+/// Like `start`, but with explicit upstream overrides for --onto rebases.
+pub fn start_with_upstreams(
+    ctx: &Ctx,
+    operation: Operation,
+    stack_name: &str,
+    branches_to_rebase: &[String],
+    onto_targets: &[String],
+    upstream_overrides: &[Option<String>],
 ) -> Result<PropagationResult> {
     if branches_to_rebase.is_empty() {
         return Ok(PropagationResult::Success { rebased_count: 0 });
@@ -62,7 +76,7 @@ pub fn start(
     ctx.save_propagation_state(&state)?;
 
     // Execute the propagation
-    execute_propagation(ctx, branches_to_rebase, onto_targets)
+    execute_propagation(ctx, branches_to_rebase, onto_targets, upstream_overrides)
 }
 
 /// Continue a previously paused propagation.
@@ -116,7 +130,7 @@ pub fn continue_propagation(ctx: &Ctx) -> Result<PropagationResult> {
         onto_targets.push(parent);
     }
 
-    execute_propagation(ctx, &remaining, &onto_targets)
+    execute_propagation(ctx, &remaining, &onto_targets, &[])
 }
 
 /// Abort the current propagation and restore all branches.
@@ -151,6 +165,7 @@ fn execute_propagation(
     ctx: &Ctx,
     branches: &[String],
     onto_targets: &[String],
+    upstream_overrides: &[Option<String>],
 ) -> Result<PropagationResult> {
     let mut completed_count = 0;
 
@@ -159,7 +174,15 @@ fn execute_propagation(
         update_current(ctx, branch, &branches[i + 1..])?;
 
         ctx.git.checkout(branch)?;
-        match ctx.git.rebase(onto)? {
+
+        // Use --onto rebase if an upstream override is provided (squash merge case)
+        let upstream = upstream_overrides.get(i).and_then(|o| o.as_deref());
+        let result = if let Some(upstream) = upstream {
+            ctx.git.rebase_onto(onto, upstream)?
+        } else {
+            ctx.git.rebase(onto)?
+        };
+        match result {
             RebaseResult::Success => {
                 completed_count += 1;
             }

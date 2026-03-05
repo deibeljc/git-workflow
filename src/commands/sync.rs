@@ -52,8 +52,10 @@ pub fn run(args: SyncArgs, ctx: &Ctx) -> Result<()> {
             continue;
         }
 
-        // Check for merged root branches
+        // Check for merged root branches, tracking the last one removed
+        // so we can use it as the upstream for --onto rebases.
         let mut merged_any = false;
+        let mut last_merged_branch: Option<String> = None;
         loop {
             let root = match stack.branches.first() {
                 Some(b) => b.name.clone(),
@@ -71,6 +73,7 @@ pub fn run(args: SyncArgs, ctx: &Ctx) -> Result<()> {
                     "Detected: '{root}' was merged into {}",
                     stack.base_branch
                 ));
+                last_merged_branch = Some(root.clone());
                 stack.branches.remove(0);
                 merged_any = true;
 
@@ -113,6 +116,15 @@ pub fn run(args: SyncArgs, ctx: &Ctx) -> Result<()> {
                 targets.push(parent);
             }
 
+            // The new root needs --onto to skip already-merged commits.
+            // git rebase --onto <base> <last_merged_branch> <new_root>
+            // This replays only the commits unique to new_root, not the
+            // ones from the merged branch that are already in base via squash.
+            let mut upstream_overrides: Vec<Option<String>> = vec![None; branches.len()];
+            if let Some(ref old_parent) = last_merged_branch {
+                upstream_overrides[0] = Some(old_parent.clone());
+            }
+
             ui::info(&format!(
                 "Rebasing {} branch{} onto {}...",
                 branches.len(),
@@ -120,12 +132,13 @@ pub fn run(args: SyncArgs, ctx: &Ctx) -> Result<()> {
                 stack.base_branch
             ));
 
-            match propagation::start(
+            match propagation::start_with_upstreams(
                 ctx,
                 Operation::Sync,
                 &stack.name,
                 &branches,
                 &targets,
+                &upstream_overrides,
             )? {
                 PropagationResult::Success { rebased_count } => {
                     ui::success(&format!(

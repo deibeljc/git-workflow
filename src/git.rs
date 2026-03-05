@@ -136,7 +136,18 @@ impl Git {
     /// Rebase the current branch onto the specified target.
     /// Returns Success or Conflict (never errors on conflict).
     pub fn rebase(&self, onto: &str) -> Result<RebaseResult> {
-        let output = self.run_raw(&["rebase", onto])?;
+        self.rebase_impl(&["rebase", onto])
+    }
+
+    /// Rebase the current branch using --onto to only replay commits after `upstream`.
+    /// This is needed after squash merges where the old parent's commits are already
+    /// in the target via a different (squashed) SHA.
+    pub fn rebase_onto(&self, onto: &str, upstream: &str) -> Result<RebaseResult> {
+        self.rebase_impl(&["rebase", "--onto", onto, upstream])
+    }
+
+    fn rebase_impl(&self, args: &[&str]) -> Result<RebaseResult> {
+        let output = self.run_raw(args)?;
 
         if output.status.success() {
             return Ok(RebaseResult::Success);
