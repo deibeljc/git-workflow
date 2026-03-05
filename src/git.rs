@@ -471,4 +471,100 @@ mod tests {
         let after = git.rev_parse("refs/heads/branch-a").unwrap();
         assert_eq!(after, new_sha);
     }
+
+    #[test]
+    fn test_rebase_conflict_detection() {
+        let (_dir, git) = setup_test_repo();
+        let main_branch = git.current_branch().unwrap();
+
+        // Create conflicting changes on two branches
+        let base = git.rev_parse("HEAD").unwrap();
+
+        // Branch A modifies README
+        git.create_branch("branch-a", &base).unwrap();
+        git.checkout("branch-a").unwrap();
+        std::fs::write(git.repo_path().join("README.md"), "branch-a content").unwrap();
+        git.run(&["add", "."]).unwrap();
+        git.run(&["commit", "-m", "branch-a changes README"]).unwrap();
+
+        // Main also modifies README (creates conflict)
+        git.checkout(&main_branch).unwrap();
+        std::fs::write(git.repo_path().join("README.md"), "main content").unwrap();
+        git.run(&["add", "."]).unwrap();
+        git.run(&["commit", "-m", "main changes README"]).unwrap();
+
+        // Rebase branch-a onto main should conflict
+        git.checkout("branch-a").unwrap();
+        match git.rebase(&main_branch).unwrap() {
+            RebaseResult::Conflict => {
+                assert!(git.is_rebase_in_progress());
+                // Clean up
+                git.rebase_abort().unwrap();
+                assert!(!git.is_rebase_in_progress());
+            }
+            RebaseResult::Success => panic!("expected conflict but got success"),
+        }
+    }
+
+    #[test]
+    fn test_has_diverged_no_remote() {
+        let (_dir, git) = setup_test_repo();
+        let main_branch = git.current_branch().unwrap();
+        // No remote set up, so should not be diverged
+        assert!(!git.has_diverged_from_remote(&main_branch).unwrap());
+    }
+
+    #[test]
+    fn test_merge_base() {
+        let (_dir, git) = setup_test_repo();
+        let base = git.rev_parse("HEAD").unwrap();
+
+        git.create_branch("branch-a", &base).unwrap();
+        git.checkout("branch-a").unwrap();
+        std::fs::write(git.repo_path().join("a.txt"), "a").unwrap();
+        git.run(&["add", "."]).unwrap();
+        git.run(&["commit", "-m", "commit on a"]).unwrap();
+
+        let mb = git.merge_base("branch-a", &base).unwrap();
+        assert_eq!(mb, base);
+    }
+
+    #[test]
+    fn test_multi_ref_transaction_atomicity() {
+        let (_dir, git) = setup_test_repo();
+        let base = git.rev_parse("HEAD").unwrap();
+
+        git.create_branch("b1", &base).unwrap();
+        git.create_branch("b2", &base).unwrap();
+        git.create_branch("b3", &base).unwrap();
+
+        // Make a new commit for a different target
+        git.checkout("b1").unwrap();
+        std::fs::write(git.repo_path().join("new.txt"), "new").unwrap();
+        git.run(&["add", "."]).unwrap();
+        git.run(&["commit", "-m", "new commit"]).unwrap();
+        let new_sha = git.rev_parse("HEAD").unwrap();
+
+        // Move all three branches atomically
+        git.update_ref_transaction(&[
+            ("b1".to_string(), base.clone()),
+            ("b2".to_string(), new_sha.clone()),
+            ("b3".to_string(), new_sha.clone()),
+        ]).unwrap();
+
+        assert_eq!(git.rev_parse("refs/heads/b1").unwrap(), base);
+        assert_eq!(git.rev_parse("refs/heads/b2").unwrap(), new_sha);
+        assert_eq!(git.rev_parse("refs/heads/b3").unwrap(), new_sha);
+    }
+
+    #[test]
+    fn test_is_working_tree_clean_staged() {
+        let (_dir, git) = setup_test_repo();
+        assert!(git.is_working_tree_clean().unwrap());
+
+        // Staged but not committed
+        std::fs::write(git.repo_path().join("staged.txt"), "staged").unwrap();
+        git.run(&["add", "staged.txt"]).unwrap();
+        assert!(!git.is_working_tree_clean().unwrap());
+    }
 }

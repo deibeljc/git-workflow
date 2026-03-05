@@ -116,9 +116,40 @@ mod tests {
     fn invalid_branch_names() {
         assert!(validate_branch_name("").is_err());
         assert!(validate_branch_name("--force").is_err());
+        assert!(validate_branch_name("-flag").is_err());
         assert!(validate_branch_name("bad..ref").is_err());
         assert!(validate_branch_name("has space").is_err());
         assert!(validate_branch_name("file.lock").is_err());
         assert!(validate_branch_name("trail/").is_err());
+        assert!(validate_branch_name("tilde~1").is_err());
+        assert!(validate_branch_name("caret^2").is_err());
+        assert!(validate_branch_name("colon:ref").is_err());
+        assert!(validate_branch_name("question?").is_err());
+        assert!(validate_branch_name("star*").is_err());
+        assert!(validate_branch_name("bracket[0]").is_err());
+        assert!(validate_branch_name("back\\slash").is_err());
+        assert!(validate_branch_name("null\0byte").is_err());
+        assert!(validate_branch_name("control\x01char").is_err());
+    }
+
+    #[test]
+    fn branch_names_with_slashes_are_valid() {
+        // Slashes are valid in branch names (feature/auth)
+        assert!(validate_branch_name("feature/auth").is_ok());
+        assert!(validate_branch_name("fix/bug-123").is_ok());
+        assert!(validate_branch_name("user/jon/experiment").is_ok());
+    }
+
+    #[test]
+    fn stack_names_with_null_bytes_rejected() {
+        assert!(validate_stack_name("bad\0name").is_err());
+    }
+
+    #[test]
+    fn stack_names_special_chars_rejected() {
+        assert!(validate_stack_name("has spaces").is_err());
+        assert!(validate_stack_name("semi;colon").is_err());
+        assert!(validate_stack_name("pipe|char").is_err());
+        assert!(validate_stack_name("ampersand&").is_err());
     }
 }

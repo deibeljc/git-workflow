@@ -262,4 +262,158 @@ mod tests {
         assert_eq!(deserialized.stack, "auth");
         assert_eq!(deserialized.original_refs.len(), 1);
     }
+
+    #[test]
+    fn test_empty_stack_navigation() {
+        let config = StackConfig {
+            name: "empty".to_string(),
+            base_branch: "dev".to_string(),
+            branches: vec![],
+        };
+
+        assert!(config.root_branch().is_none());
+        assert!(config.leaf_branch().is_none());
+        assert!(config.parent_of("anything").is_none());
+        assert_eq!(config.branch_index("anything"), None);
+        assert!(config.descendants_of("anything").is_empty());
+    }
+
+    #[test]
+    fn test_single_branch_stack() {
+        let config = StackConfig {
+            name: "solo".to_string(),
+            base_branch: "main".to_string(),
+            branches: vec![BranchEntry {
+                name: "solo-branch".to_string(),
+            }],
+        };
+
+        assert_eq!(config.root_branch().unwrap().name, "solo-branch");
+        assert_eq!(config.leaf_branch().unwrap().name, "solo-branch");
+        assert_eq!(config.parent_of("solo-branch").unwrap(), "main");
+        assert!(config.descendants_of("solo-branch").is_empty());
+    }
+
+    #[test]
+    fn test_stack_save_and_load_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test-stack.toml");
+
+        let config = StackConfig {
+            name: "roundtrip".to_string(),
+            base_branch: "dev".to_string(),
+            branches: vec![
+                BranchEntry {
+                    name: "feature/a".to_string(),
+                },
+                BranchEntry {
+                    name: "feature/b".to_string(),
+                },
+                BranchEntry {
+                    name: "feature/c".to_string(),
+                },
+            ],
+        };
+
+        save_stack(&path, &config).unwrap();
+        let loaded = load_stack(&path).unwrap();
+
+        assert_eq!(loaded.name, config.name);
+        assert_eq!(loaded.base_branch, config.base_branch);
+        assert_eq!(loaded.branches.len(), 3);
+        assert_eq!(loaded.branches[0].name, "feature/a");
+        assert_eq!(loaded.branches[2].name, "feature/c");
+    }
+
+    #[test]
+    fn test_propagation_state_save_load_remove() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.toml");
+
+        // Initially no state
+        assert!(load_propagation_state(&path).unwrap().is_none());
+
+        let state = PropagationState {
+            operation: Operation::Sync,
+            stack: "billing".to_string(),
+            started_at: "2026-03-05T15:00:00Z".to_string(),
+            original_branch: "billing-api".to_string(),
+            original_refs: vec![
+                OriginalRef {
+                    branch: "billing-ui".to_string(),
+                    commit: "abc1234".to_string(),
+                },
+                OriginalRef {
+                    branch: "billing-tests".to_string(),
+                    commit: "def5678".to_string(),
+                },
+            ],
+            completed: vec!["billing-ui".to_string()],
+            remaining: vec!["billing-tests".to_string()],
+            current: Some("billing-tests".to_string()),
+        };
+
+        save_propagation_state(&path, &state).unwrap();
+        let loaded = load_propagation_state(&path).unwrap().unwrap();
+        assert_eq!(loaded.operation, Operation::Sync);
+        assert_eq!(loaded.original_refs.len(), 2);
+        assert_eq!(loaded.completed.len(), 1);
+        assert_eq!(loaded.remaining.len(), 1);
+
+        remove_propagation_state(&path).unwrap();
+        assert!(load_propagation_state(&path).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_atomic_write_creates_parent_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested").join("deep").join("file.toml");
+        atomic_write(&path, "content").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "content");
+    }
+
+    #[test]
+    fn test_load_stack_with_invalid_branch_name_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bad.toml");
+        std::fs::write(
+            &path,
+            r#"
+name = "ok"
+base_branch = "main"
+
+[[branches]]
+name = "--malicious"
+"#,
+        )
+        .unwrap();
+
+        // Should fail validation
+        let result = load_stack(&path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_all_operation_types_serialize() {
+        for op in [
+            Operation::Rebase,
+            Operation::Sync,
+            Operation::Adopt,
+            Operation::BranchRemove,
+        ] {
+            let state = PropagationState {
+                operation: op.clone(),
+                stack: "test".to_string(),
+                started_at: "2026-01-01T00:00:00Z".to_string(),
+                original_branch: "main".to_string(),
+                original_refs: vec![],
+                completed: vec![],
+                remaining: vec![],
+                current: None,
+            };
+            let serialized = toml::to_string_pretty(&state).unwrap();
+            let deserialized: PropagationState = toml::from_str(&serialized).unwrap();
+            assert_eq!(deserialized.operation, op);
+        }
+    }
 }
