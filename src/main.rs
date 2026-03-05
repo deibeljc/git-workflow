@@ -48,9 +48,6 @@ fn main() -> Result<()> {
         Commands::Rebase(args) => commands::rebase::run(args, &ctx),
         Commands::Sync(args) => commands::sync::run(args, &ctx),
         Commands::Push(args) => commands::push::run(args, &ctx),
-        Commands::Tree => {
-            ui::info("Tree is not yet implemented (Phase 5).");
-            Ok(())
-        }
+        Commands::Tree => commands::tree::run(&ctx),
     }
 }
