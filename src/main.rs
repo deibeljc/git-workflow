@@ -29,7 +29,7 @@ fn main() -> Result<()> {
         let allowed = matches!(
             &command,
             Commands::Rebase(args) if args.cont || args.abort
-        ) || matches!(&command, Commands::Tree(_))
+        ) || matches!(&command, Commands::Log(_))
             || matches!(&command, Commands::Switch(_));
 
         if !allowed {
@@ -55,7 +55,7 @@ fn main() -> Result<()> {
         Commands::Sync(args) => commands::sync::run(args, &ctx),
         Commands::Push(args) => commands::push::run(args, &ctx),
         Commands::Switch(args) => commands::switch::run(args.branch, &ctx),
-        Commands::Tree(args) => commands::tree::run(&ctx, args.pr),
+        Commands::Log(args) => commands::tree::run(&ctx, args.pr),
         Commands::Config(args) => commands::config::run(args.command, &ctx),
         Commands::Completions(_) => unreachable!(),
     }
