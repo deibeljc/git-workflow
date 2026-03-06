@@ -30,6 +30,27 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
         }
     }
 
+    // Detect which branches need a rebase (parent tip has moved past the fork point)
+    let mut needs_rebase: HashMap<String, bool> = HashMap::new();
+    for stack in &stacks {
+        for (idx, branch) in stack.branches.iter().enumerate() {
+            if idx == 0 {
+                continue; // root can't need a rebase within its stack
+            }
+            if !ref_info.contains_key(&branch.name) {
+                continue; // missing branch
+            }
+            let parent_name = stack.parent_of(&branch.name).unwrap_or_default();
+            if let Ok(parent_sha) = ctx.git.rev_parse(&parent_name) {
+                if let Ok(mb) = ctx.git.merge_base(&branch.name, &parent_name) {
+                    if mb != parent_sha {
+                        needs_rebase.insert(branch.name.clone(), true);
+                    }
+                }
+            }
+        }
+    }
+
     // Group stacks by base branch
     let mut by_base: Vec<(String, Vec<usize>)> = vec![];
     for (i, stack) in stacks.iter().enumerate() {
@@ -149,6 +170,7 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
                 let branch_fork = if is_last_branch { "╰─" } else { "├─" };
                 let branch_pipe = if is_last_branch { "   " } else { "│  " };
 
+                let stale = needs_rebase.get(&branch.name).copied().unwrap_or(false);
                 let line = format_branch_line(
                     &branch.name,
                     is_current,
@@ -157,6 +179,7 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
                     info,
                     is_last_branch,
                     None,
+                    stale,
                 );
                 println!("{}{}", stack_pipe.dimmed(), line);
                 branch_positions.insert(branch.name.clone(), total_lines);
@@ -199,6 +222,7 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
                             let exists = info.is_some();
 
                             let lines_up = total_lines - line_pos;
+                            let stale = needs_rebase.get(&branch.name).copied().unwrap_or(false);
                             let new_line = format_branch_line(
                                 &branch.name,
                                 is_current,
@@ -207,6 +231,7 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
                                 info,
                                 is_last_branch,
                                 Some(pr),
+                                stale,
                             );
                             print!(
                                 "\x1b[{lines_up}A\r\x1b[2K{}{new_line}\x1b[{lines_up}B\r",
@@ -230,6 +255,7 @@ fn format_branch_line(
     info: Option<&RefInfo>,
     is_last: bool,
     pr: Option<&gh::PrInfo>,
+    needs_rebase: bool,
 ) -> String {
     let marker = if is_current {
         "@".green().bold().to_string()
@@ -258,6 +284,9 @@ fn format_branch_line(
             RemoteStatus::NeedsPush => tags.push("needs push".yellow().to_string()),
             _ => {}
         }
+    }
+    if needs_rebase {
+        tags.push("needs rebase".yellow().to_string());
     }
     if !exists {
         tags.push("missing".red().to_string());
