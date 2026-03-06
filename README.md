@@ -41,25 +41,15 @@ eval "$(gw completions bash)"
 gw completions fish | source
 ```
 
-### MCP server (Claude Code integration)
+### Claude Code integration
 
-`gw` ships with an MCP server so AI assistants can manage your stacks directly.
+`gw` has a built-in MCP server so Claude Code can manage your stacks directly. Set it up with one command:
 
 ```bash
-cargo install --path mcp-server
+gw mcp-setup
 ```
 
-Add to your Claude Code settings (`.claude/settings.json`):
-
-```json
-{
-  "mcpServers": {
-    "gw": {
-      "command": "gw-mcp"
-    }
-  }
-}
-```
+This writes the MCP config to `.claude/settings.json` in your repo. Restart Claude Code and it can use gw tools natively.
 
 ## Quick start
 
