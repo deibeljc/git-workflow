@@ -3,6 +3,9 @@ name = "gw"
 version = "0.1.0"
 edition = "2024"
 description = "Git stacked branch manager"
+repository = "https://github.com/jondeibel/git-workflow"
+homepage = "https://github.com/jondeibel/git-workflow"
+license = "MIT"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -21,3 +24,16 @@ schemars = "0.8"
 assert_cmd = "2"
 predicates = "3"
 tempfile = "3"
+
+[workspace.metadata.dist]
+cargo-dist-version = "0.31.0"
+ci = "github"
+installers = ["shell", "homebrew"]
+tap = "jondeibel/homebrew-tap"
+publish-jobs = ["homebrew"]
+targets = [
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+]
