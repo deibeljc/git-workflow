@@ -6,6 +6,13 @@ use crate::context::Ctx;
 use crate::gh;
 use crate::ui;
 
+/// All the git data we need, fetched in as few subprocesses as possible.
+struct TreeData {
+    merge_bases: HashMap<String, String>,
+    commit_cache: HashMap<String, Vec<(String, String)>>,
+    behind_counts: HashMap<String, usize>,
+}
+
 pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
     let stacks = ctx.load_all_stacks()?;
 
@@ -16,15 +23,14 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
 
     let current_branch = ctx.git.current_branch().unwrap_or_default();
 
-    // === One git call: get all branch SHAs and remote tracking info ===
+    // === Phase 1: one git call for all branch SHAs + tracking info ===
     let ref_info = batch_ref_info(ctx);
 
-    // Collect all branch->parent pairs we need merge-bases for, plus log ranges
+    // === Phase 2: figure out what we need ===
     let mut merge_base_pairs: Vec<(String, String)> = Vec::new();
-    let mut log_ranges: Vec<(String, String, String)> = Vec::new(); // (branch, parent, branch)
+    let mut log_ranges: Vec<(String, String)> = Vec::new(); // (branch, parent)
 
     for stack in &stacks {
-        // For behind-count: root vs base
         if let Some(root) = stack.branches.first() {
             if ref_info.contains_key(&root.name) {
                 merge_base_pairs.push((root.name.clone(), stack.base_branch.clone()));
@@ -35,24 +41,17 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
                 continue;
             }
             let parent = stack.parent_of(&branch.name).unwrap_or_default();
-            // For needs-rebase detection (non-root only)
             if idx > 0 {
                 merge_base_pairs.push((branch.name.clone(), parent.clone()));
             }
-            // For commit log
-            log_ranges.push((branch.name.clone(), parent.clone(), branch.name.clone()));
+            log_ranges.push((branch.name.clone(), parent.clone()));
         }
     }
 
-    // === Batch merge-base: one call per pair (unavoidable) but batched via a single git process ===
-    // Use git merge-base in batch by piping through a script? No, git doesn't support that.
-    // Instead, batch them into a single shell command that runs multiple merge-bases.
-    let merge_bases = batch_merge_bases(ctx, &merge_base_pairs);
+    // === Phase 3: ONE bash subprocess, all git calls in parallel ===
+    let batch = run_batch_script(ctx, &ref_info, &stacks, &merge_base_pairs, &log_ranges);
 
-    // === Batch commit logs: one git log call with all ranges ===
-    let commit_cache = batch_logs(ctx, &log_ranges);
-
-    // Compute needs-rebase from merge-base data
+    // === Phase 4: compute derived data ===
     let mut needs_rebase: HashMap<String, bool> = HashMap::new();
     for stack in &stacks {
         for (idx, branch) in stack.branches.iter().enumerate() {
@@ -61,7 +60,7 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
             }
             let parent_name = stack.parent_of(&branch.name).unwrap_or_default();
             let pair_key = format!("{}:{}", branch.name, parent_name);
-            if let Some(mb_sha) = merge_bases.get(&pair_key) {
+            if let Some(mb_sha) = batch.merge_bases.get(&pair_key) {
                 if let Some(ri) = ref_info.get(&parent_name) {
                     if *mb_sha != ri.sha {
                         needs_rebase.insert(branch.name.clone(), true);
@@ -70,26 +69,6 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
             }
         }
     }
-
-    // Compute behind-counts from merge-base data (batched)
-    let mut behind_pairs: Vec<(String, String, String)> = Vec::new(); // (stack_name, mb_sha, base)
-    for stack in &stacks {
-        if let Some(root) = stack.branches.first() {
-            let pair_key = format!("{}:{}", root.name, stack.base_branch);
-            if let Some(mb_sha) = merge_bases.get(&pair_key) {
-                if let Some(base_ri) = ref_info.get(&stack.base_branch) {
-                    if *mb_sha != base_ri.sha {
-                        behind_pairs.push((
-                            stack.name.clone(),
-                            mb_sha.clone(),
-                            stack.base_branch.clone(),
-                        ));
-                    }
-                }
-            }
-        }
-    }
-    let behind_counts = batch_behind_counts(ctx, &behind_pairs);
 
     // Group stacks by base branch
     let mut by_base: Vec<(String, Vec<usize>)> = vec![];
@@ -115,7 +94,7 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
     for (base, stack_indices) in &by_base {
         let max_behind = stack_indices
             .iter()
-            .filter_map(|&si| behind_counts.get(&stacks[si].name))
+            .filter_map(|&si| batch.behind_counts.get(&stacks[si].name))
             .max()
             .copied()
             .unwrap_or(0);
@@ -149,7 +128,7 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
             let stack_pipe = if is_last_stack { "   " } else { "│  " };
 
             let mut stack_tags: Vec<String> = vec![];
-            if let Some(&behind) = behind_counts.get(&stack.name) {
+            if let Some(&behind) = batch.behind_counts.get(&stack.name) {
                 stack_tags.push(format!("{behind} behind").yellow().to_string());
             }
             let stack_tag_str = if stack_tags.is_empty() {
@@ -190,7 +169,7 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
                 branch_positions.insert(branch.name.clone(), total_lines);
                 total_lines += 1;
 
-                if let Some(commits) = commit_cache.get(&branch.name) {
+                if let Some(commits) = batch.commit_cache.get(&branch.name) {
                     for (sha, subject) in commits {
                         println!(
                             "{}{}{} {} {}",
@@ -250,6 +229,142 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Run a single bash subprocess that executes all merge-bases, logs, and
+/// behind-counts in parallel using temp files to avoid output interleaving.
+fn run_batch_script(
+    ctx: &Ctx,
+    ref_info: &HashMap<String, RefInfo>,
+    stacks: &[crate::state::StackConfig],
+    merge_base_pairs: &[(String, String)],
+    log_ranges: &[(String, String)],
+) -> TreeData {
+    let mut script = String::from("TD=$(mktemp -d)\n");
+
+    // --- All parallel jobs write to individual temp files ---
+
+    // Merge-bases: write to $TD/mb_<idx>
+    for (i, (a, b)) in merge_base_pairs.iter().enumerate() {
+        script.push_str(&format!(
+            "{{ echo \"{a}:{b}=$(git merge-base {a} {b} 2>/dev/null)\"; }} > \"$TD/mb_{i}\" &\n"
+        ));
+    }
+
+    // Logs: write to $TD/log_<branch>
+    for (branch, parent) in log_ranges {
+        script.push_str(&format!(
+            "git log --reverse --oneline --format='%h %s' --max-count=10 \
+             {parent}..{branch} 2>/dev/null > \"$TD/log_{branch}\" &\n"
+        ));
+    }
+
+    // Behind-counts: write to $TD/behind_<stack_name>
+    for stack in stacks {
+        if let Some(root) = stack.branches.first() {
+            if ref_info.contains_key(&root.name) {
+                if let Some(base_ri) = ref_info.get(&stack.base_branch) {
+                    let root_name = &root.name;
+                    let base = &stack.base_branch;
+                    let base_sha = &base_ri.sha;
+                    let stack_name = &stack.name;
+                    script.push_str(&format!(
+                        "{{ MB=$(git merge-base {root_name} {base} 2>/dev/null); \
+                         if [ \"$MB\" != \"{base_sha}\" ] && [ -n \"$MB\" ]; then \
+                         git rev-list --count \"$MB\"..{base} 2>/dev/null; \
+                         fi; }} > \"$TD/behind_{stack_name}\" &\n"
+                    ));
+                }
+            }
+        }
+    }
+
+    script.push_str("wait\n");
+
+    // --- Collect results to stdout in structured format ---
+    // Merge-bases
+    for i in 0..merge_base_pairs.len() {
+        script.push_str(&format!("echo \"MB:$(cat \"$TD/mb_{i}\")\"\n"));
+    }
+    // Logs
+    for (branch, _) in log_ranges {
+        script.push_str(&format!(
+            "echo \"LOG:{branch}\"\ncat \"$TD/log_{branch}\"\necho \"LOG_END\"\n"
+        ));
+    }
+    // Behind-counts
+    for stack in stacks {
+        if let Some(root) = stack.branches.first() {
+            if ref_info.contains_key(&root.name) {
+                if ref_info.contains_key(&stack.base_branch) {
+                    let stack_name = &stack.name;
+                    script.push_str(&format!(
+                        "V=$(cat \"$TD/behind_{stack_name}\" 2>/dev/null); \
+                         [ -n \"$V\" ] && echo \"BEHIND:{stack_name}=$V\"\n"
+                    ));
+                }
+            }
+        }
+    }
+
+    script.push_str("rm -rf \"$TD\"\n");
+
+    // Run it
+    let output = std::process::Command::new("bash")
+        .arg("-c")
+        .arg(&script)
+        .current_dir(ctx.git.repo_path())
+        .output();
+
+    let mut merge_bases = HashMap::new();
+    let mut commit_cache: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    let mut behind_counts = HashMap::new();
+
+    if let Ok(output) = output {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut current_log_branch: Option<String> = None;
+        let mut current_commits: Vec<(String, String)> = Vec::new();
+
+        for line in stdout.lines() {
+            if let Some(rest) = line.strip_prefix("MB:") {
+                if let Some((key, sha)) = rest.split_once('=') {
+                    if !sha.is_empty() {
+                        merge_bases.insert(key.to_string(), sha.to_string());
+                    }
+                }
+            } else if let Some(rest) = line.strip_prefix("LOG:") {
+                if let Some(branch) = current_log_branch.take() {
+                    commit_cache.insert(branch, std::mem::take(&mut current_commits));
+                }
+                current_log_branch = Some(rest.to_string());
+                current_commits.clear();
+            } else if line == "LOG_END" {
+                if let Some(branch) = current_log_branch.take() {
+                    commit_cache.insert(branch, std::mem::take(&mut current_commits));
+                }
+            } else if let Some(rest) = line.strip_prefix("BEHIND:") {
+                if let Some((name, count_str)) = rest.split_once('=') {
+                    if let Ok(n) = count_str.trim().parse::<usize>() {
+                        if n > 0 {
+                            behind_counts.insert(name.to_string(), n);
+                        }
+                    }
+                }
+            } else if current_log_branch.is_some() && !line.is_empty() {
+                let (sha, subject) = line.split_once(' ').unwrap_or((line, ""));
+                current_commits.push((sha.to_string(), subject.to_string()));
+            }
+        }
+        if let Some(branch) = current_log_branch.take() {
+            commit_cache.insert(branch, current_commits);
+        }
+    }
+
+    TreeData {
+        merge_bases,
+        commit_cache,
+        behind_counts,
+    }
 }
 
 fn format_branch_line(
@@ -354,151 +469,5 @@ fn batch_ref_info(ctx: &Ctx) -> HashMap<String, RefInfo> {
         };
         result.insert(name.to_string(), RefInfo { sha, remote_status });
     }
-    result
-}
-
-/// Batch merge-base calls into a single bash subprocess.
-/// Returns map of "branch:other" -> merge-base SHA.
-fn batch_merge_bases(ctx: &Ctx, pairs: &[(String, String)]) -> HashMap<String, String> {
-    if pairs.is_empty() {
-        return HashMap::new();
-    }
-
-    let mut script = String::new();
-    for (a, b) in pairs {
-        script.push_str(&format!(
-            "echo \"{}:{}=$(git merge-base {} {} 2>/dev/null)\"\n",
-            a, b, a, b
-        ));
-    }
-
-    let mut result = HashMap::new();
-    let output = std::process::Command::new("bash")
-        .arg("-c")
-        .arg(&script)
-        .current_dir(ctx.git.repo_path())
-        .output();
-
-    if let Ok(output) = output {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for line in stdout.lines() {
-            if let Some((key, sha)) = line.split_once('=') {
-                if !sha.is_empty() {
-                    result.insert(key.to_string(), sha.trim().to_string());
-                }
-            }
-        }
-    } else {
-        for (a, b) in pairs {
-            if let Ok(sha) = ctx.git.merge_base(a, b) {
-                result.insert(format!("{a}:{b}"), sha);
-            }
-        }
-    }
-
-    result
-}
-
-/// Batch rev-list --count calls into a single bash subprocess.
-fn batch_behind_counts(
-    ctx: &Ctx,
-    pairs: &[(String, String, String)],
-) -> HashMap<String, usize> {
-    if pairs.is_empty() {
-        return HashMap::new();
-    }
-
-    let mut script = String::new();
-    for (stack_name, mb_sha, base) in pairs {
-        script.push_str(&format!(
-            "echo \"{}=$(git rev-list --count {}..{} 2>/dev/null)\"\n",
-            stack_name, mb_sha, base
-        ));
-    }
-
-    let mut result = HashMap::new();
-    let output = std::process::Command::new("bash")
-        .arg("-c")
-        .arg(&script)
-        .current_dir(ctx.git.repo_path())
-        .output();
-
-    if let Ok(output) = output {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for line in stdout.lines() {
-            if let Some((name, count_str)) = line.split_once('=') {
-                if let Ok(n) = count_str.trim().parse::<usize>() {
-                    if n > 0 {
-                        result.insert(name.to_string(), n);
-                    }
-                }
-            }
-        }
-    }
-
-    result
-}
-
-/// Batch log calls. Uses a single git log invocation with multiple ranges.
-/// Returns map of branch_name -> Vec<(short_sha, subject)>.
-fn batch_logs(
-    ctx: &Ctx,
-    ranges: &[(String, String, String)],
-) -> HashMap<String, Vec<(String, String)>> {
-    if ranges.is_empty() {
-        return HashMap::new();
-    }
-
-    // Build a shell script: for each range, run git log with a delimiter
-    let delimiter = "---GW_RANGE_DELIM---";
-    let mut script = String::new();
-    for (branch, parent, _) in ranges {
-        script.push_str(&format!(
-            "echo \"{delimiter} {branch}\"\n\
-             git log --reverse --oneline --format='%h %s' --max-count=10 {parent}..{branch} 2>/dev/null\n"
-        ));
-    }
-
-    let mut result: HashMap<String, Vec<(String, String)>> = HashMap::new();
-
-    let output = std::process::Command::new("bash")
-        .arg("-c")
-        .arg(&script)
-        .current_dir(ctx.git.repo_path())
-        .output();
-
-    if let Ok(output) = output {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let mut current_branch = String::new();
-        let mut current_commits: Vec<(String, String)> = Vec::new();
-
-        for line in stdout.lines() {
-            if let Some(rest) = line.strip_prefix(delimiter) {
-                // Save previous branch
-                if !current_branch.is_empty() {
-                    result.insert(
-                        current_branch.clone(),
-                        std::mem::take(&mut current_commits),
-                    );
-                }
-                current_branch = rest.trim().to_string();
-            } else if !line.is_empty() && !current_branch.is_empty() {
-                let (sha, subject) = line.split_once(' ').unwrap_or((line, ""));
-                current_commits.push((sha.to_string(), subject.to_string()));
-            }
-        }
-        // Don't forget the last branch
-        if !current_branch.is_empty() {
-            result.insert(current_branch, current_commits);
-        }
-    } else {
-        // Fallback: individual calls
-        for (branch, parent, _) in ranges {
-            if let Ok(commits) = ctx.git.log_oneline(parent, branch, 10) {
-                result.insert(branch.clone(), commits);
-            }
-        }
-    }
-
     result
 }
