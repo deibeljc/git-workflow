@@ -36,6 +36,7 @@ pub fn run(args: SyncArgs, ctx: &Ctx) -> Result<()> {
     let pr_map = gh::batch_pr_status();
 
     let mut synced_bases = std::collections::HashSet::new();
+    let mut branches_to_delete: Vec<String> = Vec::new();
 
     for mut stack in stacks {
         let base = &stack.base_branch;
@@ -96,13 +97,9 @@ pub fn run(args: SyncArgs, ctx: &Ctx) -> Result<()> {
                 stack.branches.remove(0);
                 merged_any = true;
 
-                // Optionally delete the local branch since it's been merged.
+                // Queue branch for deletion after we've checked out a safe branch.
                 if ctx.load_config()?.should_delete_on_merge() {
-                    if let Err(e) = ctx.git.run(&["branch", "-D", &root]) {
-                        ui::warn(&format!("Could not delete local branch '{root}': {e}"));
-                    } else {
-                        ui::info(&format!("Deleted local branch '{root}'"));
-                    }
+                    branches_to_delete.push(root.clone());
                 }
 
                 if stack.branches.is_empty() {
@@ -218,6 +215,15 @@ pub fn run(args: SyncArgs, ctx: &Ctx) -> Result<()> {
         // Wasn't in any stack, just go to base
         let base = ctx.default_base_branch().unwrap_or_else(|_| "main".to_string());
         let _ = ctx.git.checkout(&base);
+    }
+
+    // Delete merged branches now that we've checked out a safe branch.
+    for branch in &branches_to_delete {
+        if let Err(e) = ctx.git.run(&["branch", "-D", branch]) {
+            ui::warn(&format!("Could not delete local branch '{branch}': {e}"));
+        } else {
+            ui::info(&format!("Deleted local branch '{branch}'"));
+        }
     }
 
     Ok(())
