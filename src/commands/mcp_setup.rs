@@ -3,23 +3,26 @@ use std::path::PathBuf;
 
 use crate::ui;
 
-pub fn run() -> Result<()> {
-    // Find the gw binary itself (the MCP server is a subcommand)
+pub fn run(global: bool) -> Result<()> {
     let gw_path = find_gw()?;
 
-    // Find the repo root for .mcp.json
-    let git_root = std::process::Command::new("git")
-        .args(["rev-parse", "--show-toplevel"])
-        .output()
-        .context("failed to find git root")?;
-
-    let root = if git_root.status.success() {
-        PathBuf::from(String::from_utf8_lossy(&git_root.stdout).trim())
+    let mcp_path = if global {
+        PathBuf::from(std::env::var("HOME").context("HOME not set")?).join(".mcp.json")
     } else {
-        std::env::current_dir().context("failed to get current directory")?
-    };
+        // Project-level: use git root or current directory
+        let git_root = std::process::Command::new("git")
+            .args(["rev-parse", "--show-toplevel"])
+            .output()
+            .context("failed to find git root")?;
 
-    let mcp_path = root.join(".mcp.json");
+        let root = if git_root.status.success() {
+            PathBuf::from(String::from_utf8_lossy(&git_root.stdout).trim())
+        } else {
+            std::env::current_dir().context("failed to get current directory")?
+        };
+
+        root.join(".mcp.json")
+    };
 
     // Load existing .mcp.json or start fresh
     let mut config: serde_json::Value = if mcp_path.exists() {
@@ -56,20 +59,18 @@ pub fn run() -> Result<()> {
     std::fs::write(&mcp_path, format!("{content}\n"))
         .with_context(|| format!("failed to write {}", mcp_path.display()))?;
 
-    ui::success(&format!("MCP server configured at {}", mcp_path.display()));
-    ui::info(&format!("Command: {} mcp-server", gw_path.display()));
+    let scope = if global { "globally" } else { "for this project" };
+    ui::success(&format!("MCP server configured {scope} at {}", mcp_path.display()));
     ui::info("Restart Claude Code to pick up the new MCP server.");
 
     Ok(())
 }
 
 fn find_gw() -> Result<PathBuf> {
-    // Fall back to current executable path first (most reliable)
     if let Ok(exe) = std::env::current_exe() {
         return Ok(exe);
     }
 
-    // Check PATH
     if let Ok(output) = std::process::Command::new("which").arg("gw").output() {
         if output.status.success() {
             let path = String::from_utf8_lossy(&output.stdout).trim().to_string();

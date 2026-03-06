@@ -33,7 +33,7 @@ pub enum Commands {
     Completions(CompletionsArgs),
     /// Set up the MCP server for Claude Code
     #[command(name = "mcp-setup")]
-    McpSetup,
+    McpSetup(McpSetupArgs),
     /// Run the MCP server (used by Claude Code, not for direct use)
     #[command(name = "mcp-server", hide = true)]
     McpServer,
@@ -180,6 +180,15 @@ pub enum ConfigCommands {
     },
     /// Show current configuration
     Show,
+}
+
+// -- MCP Setup --
+
+#[derive(Args)]
+pub struct McpSetupArgs {
+    /// Install globally (~/.mcp.json) instead of in the current project
+    #[arg(long)]
+    pub global: bool,
 }
 
 // -- Completions --
