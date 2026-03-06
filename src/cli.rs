@@ -124,6 +124,9 @@ pub struct SyncArgs {
     /// Manually indicate a branch was merged (when gh is unavailable)
     #[arg(long)]
     pub merged: Option<String>,
+    /// Rebase the entire stack onto the latest base branch
+    #[arg(long)]
+    pub rebase: bool,
 }
 
 // -- Push --

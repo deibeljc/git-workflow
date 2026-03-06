@@ -109,7 +109,8 @@ _gw() {
         sync)
           _arguments \
             '--stack[Sync specific stack]:stack:_gw_stacks' \
-            '--merged[Branch that was merged]:branch:_gw_branches'
+            '--merged[Branch that was merged]:branch:_gw_branches' \
+            '--rebase[Rebase stack onto latest base]'
           ;;
         push)
           _arguments '--yes[Skip confirmation]'
@@ -217,7 +218,7 @@ _gw() {
       elif [[ "$prev" == "--merged" ]]; then
         COMPREPLY=($(compgen -W "$(_gw_branches)" -- "$cur"))
       else
-        COMPREPLY=($(compgen -W "--stack --merged" -- "$cur"))
+        COMPREPLY=($(compgen -W "--stack --merged --rebase" -- "$cur"))
       fi
       ;;
     push)
@@ -309,6 +310,7 @@ complete -c gw -f -n '__gw_using_command rebase' -l abort -d 'Abort and roll bac
 # sync
 complete -c gw -f -n '__gw_using_command sync' -l stack -d 'Sync specific stack' -ra '(__gw_stacks)'
 complete -c gw -f -n '__gw_using_command sync' -l merged -d 'Branch that was merged' -ra '(__gw_branches)'
+complete -c gw -f -n '__gw_using_command sync' -l rebase -d 'Rebase stack onto latest base'
 
 # push
 complete -c gw -f -n '__gw_using_command push' -l yes -d 'Skip confirmation'

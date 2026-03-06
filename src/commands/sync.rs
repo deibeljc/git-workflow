@@ -106,10 +106,12 @@ pub fn run(args: SyncArgs, ctx: &Ctx) -> Result<()> {
             ctx.save_stack(&stack)?;
         }
 
-        // Only rebase if a branch was merged and removed. If nothing was merged,
-        // the stack stays pinned to its current base commit so the root branch
-        // doesn't diverge from its remote (which would force-push an open PR).
-        if merged_any && !stack.branches.is_empty() {
+        // Rebase if a branch was merged, or if --rebase was explicitly requested.
+        // Without --rebase, the stack stays pinned to its current base commit so
+        // the root branch doesn't diverge from its remote (which would force-push
+        // an open PR).
+        let should_rebase = (merged_any || args.rebase) && !stack.branches.is_empty();
+        if should_rebase {
             let branches: Vec<String> =
                 stack.branches.iter().map(|b| b.name.clone()).collect();
 
