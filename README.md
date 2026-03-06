@@ -64,15 +64,29 @@ eval "$(gw completions bash)"
 gw completions fish | source
 ```
 
-### Claude Code integration
+### Claude Code plugin
 
-`gw` has a built-in MCP server so Claude Code can manage your stacks directly. Set it up with one command:
+The fastest way to get gw working with Claude Code. The plugin installs the MCP server and a skill that teaches Claude when to use gw instead of raw git.
+
+```bash
+# Add the gw marketplace (one time)
+/plugin marketplace add jondeibel/git-workflow
+
+# Install the plugin
+/plugin install gw@git-workflow
+```
+
+Restart Claude Code and you're good to go. Claude will automatically use gw tools for branch management, pushing, rebasing, and syncing.
+
+### Manual MCP setup
+
+If you'd rather skip the plugin and just get the MCP tools, you can set it up with one command:
 
 ```bash
 gw mcp-setup
 ```
 
-This writes the MCP config to `.mcp.json` and you're good to go. Restart Claude Code and it can use gw tools natively.
+This writes the MCP config to `.mcp.json` and gives Claude access to gw tools directly. You won't get the skill that guides Claude on when to use gw vs raw git, but the tools will work.
 
 ## Quick start
 
