@@ -4,6 +4,7 @@ pub mod context;
 pub mod gh;
 pub mod git;
 pub mod propagation;
+pub mod stash;
 pub mod state;
 pub mod ui;
 pub mod validate;

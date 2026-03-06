@@ -2,6 +2,7 @@ use anyhow::{bail, Result};
 
 use crate::cli::BranchCommands;
 use crate::context::Ctx;
+use crate::stash;
 use crate::state::BranchEntry;
 use crate::ui;
 use crate::validate;
@@ -51,7 +52,7 @@ fn create(ctx: &Ctx, name: &str) -> Result<()> {
     });
     ctx.save_stack(&stack)?;
 
-    ctx.git.checkout(name)?;
+    stash::checkout_with_stash(ctx, name)?;
 
     ui::success(&format!("Added '{name}' to stack '{}'", stack.name));
     ui::info(&format!("Child of '{current}'"));

@@ -346,3 +346,62 @@ fn full_branch_lifecycle() {
         .success()
         .stdout(predicate::str::contains("No stacks"));
 }
+
+// ============================================================
+// Auto-stash on branch create
+// ============================================================
+
+#[test]
+fn branch_create_auto_stashes_dirty_work() {
+    let repo = TestRepo::new();
+
+    gw_cmd(&repo.path)
+        .args(["stack", "create", "auth"])
+        .assert()
+        .success();
+    repo.commit_file("a.txt", "a", "auth work");
+
+    // Create dirty work on auth
+    std::fs::write(repo.path.join("dirty.txt"), "wip").unwrap();
+
+    // Branch create should auto-stash the dirty work
+    gw_cmd(&repo.path)
+        .args(["branch", "create", "auth-tests"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Stashed changes for auth"))
+        .stdout(predicate::str::contains("Added 'auth-tests' to stack 'auth'"));
+
+    // Should be on the new branch with a clean working tree
+    assert_eq!(repo.current_branch(), "auth-tests");
+    assert!(!repo.path.join("dirty.txt").exists());
+
+    // Switch back to auth - should restore the stashed work
+    gw_cmd(&repo.path)
+        .args(["switch", "auth"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Restored stashed changes for auth"));
+
+    assert!(repo.path.join("dirty.txt").exists());
+    assert_eq!(std::fs::read_to_string(repo.path.join("dirty.txt")).unwrap(), "wip");
+}
+
+#[test]
+fn branch_create_clean_tree_no_stash() {
+    let repo = TestRepo::new();
+
+    gw_cmd(&repo.path)
+        .args(["stack", "create", "auth"])
+        .assert()
+        .success();
+    repo.commit_file("a.txt", "a", "auth work");
+
+    // Branch create with clean tree - no stash messages
+    gw_cmd(&repo.path)
+        .args(["branch", "create", "auth-tests"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Stashed").not())
+        .stdout(predicate::str::contains("Added 'auth-tests'"));
+}

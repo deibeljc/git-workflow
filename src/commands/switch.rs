@@ -4,6 +4,7 @@ use console::{Key, Term};
 use std::collections::HashSet;
 
 use crate::context::Ctx;
+use crate::stash;
 use crate::ui;
 
 struct PickerItem {
@@ -48,7 +49,7 @@ pub fn run(branch: Option<String>, ctx: &Ctx) -> Result<()> {
             ui::info("Already on that branch.");
             return Ok(());
         }
-        ctx.git.checkout(&target)?;
+        stash::checkout_with_stash(ctx, &target)?;
         ui::success(&format!("Switched to {target}"));
         return Ok(());
     }
@@ -177,7 +178,7 @@ pub fn run(branch: Option<String>, ctx: &Ctx) -> Result<()> {
             if *target == current {
                 ui::info("Already on that branch.");
             } else {
-                ctx.git.checkout(target)?;
+                stash::checkout_with_stash(ctx, target)?;
                 ui::success(&format!("Switched to {target}"));
             }
         }

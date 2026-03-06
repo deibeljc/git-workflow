@@ -287,6 +287,70 @@ impl Git {
         Ok(())
     }
 
+    /// Stash working tree changes with a message tag.
+    /// Uses --include-untracked to capture new files.
+    pub fn stash_push(&self, message: &str) -> Result<()> {
+        self.run(&["stash", "push", "--include-untracked", "-m", message])?;
+        Ok(())
+    }
+
+    /// List stash entries whose message matches the given string exactly.
+    /// Returns a vec of stash indices (e.g. 0, 2, 5) for matching entries,
+    /// ordered from most recent to oldest.
+    pub fn stash_list_matching(&self, message: &str) -> Result<Vec<usize>> {
+        let output = self.run_raw(&["stash", "list", "--format=%gd %gs"])?;
+        let stdout = String::from_utf8(output.stdout)
+            .context("git stash list output was not valid UTF-8")?;
+
+        if stdout.trim().is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut matches = vec![];
+        for line in stdout.trim().lines() {
+            // Lines look like: "stash@{0} On branch-name: gw:feature-a"
+            // The %gd is "stash@{N}" and %gs is the stash subject
+            let Some((gd, gs)) = line.split_once(' ') else {
+                continue;
+            };
+            // Check if the stash subject ends with our exact message.
+            // git prepends "On <branch>: " to the message, so we match the suffix.
+            if gs.ends_with(message) {
+                // Parse the index from stash@{N}
+                if let Some(idx_str) = gd.strip_prefix("stash@{").and_then(|s| s.strip_suffix('}'))
+                {
+                    if let Ok(idx) = idx_str.parse::<usize>() {
+                        matches.push(idx);
+                    }
+                }
+            }
+        }
+        Ok(matches)
+    }
+
+    /// Pop a stash entry by index. Returns whether conflicts occurred.
+    /// On clean pop, the stash entry is removed. On conflict, the stash
+    /// entry remains and conflict markers are left in the working tree.
+    pub fn stash_pop(&self, index: usize) -> Result<bool> {
+        let output = self.run_raw(&["stash", "pop", &format!("stash@{{{index}}}")])?;
+
+        if output.status.success() {
+            return Ok(false);
+        }
+
+        // Check if this was a conflict (stash applied with merge conflicts)
+        // vs an actual error (bad stash index, etc.)
+        if self.has_unresolved_conflicts()? {
+            return Ok(true);
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(anyhow!(
+            "git stash pop failed: {}",
+            stderr.trim()
+        ))
+    }
+
     /// Atomically update multiple refs using git update-ref --stdin.
     /// Each entry is (branch_name, target_sha).
     pub fn update_ref_transaction(&self, updates: &[(String, String)]) -> Result<()> {
