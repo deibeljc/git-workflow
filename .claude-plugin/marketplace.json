@@ -1,0 +1,20 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "git-workflow",
+  "description": "Stacked branch management for Claude Code",
+  "owner": {
+    "name": "Jon Deibel"
+  },
+  "plugins": [
+    {
+      "name": "gw",
+      "description": "Stacked branch management for Claude Code. Teaches Claude to use gw for branch creation, pushing, rebasing, and syncing instead of raw git commands. Includes MCP tools for direct stack manipulation.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Jon Deibel"
+      },
+      "homepage": "https://github.com/jondeibel/git-workflow",
+      "source": "./plugins/gw"
+    }
+  ]
+}
