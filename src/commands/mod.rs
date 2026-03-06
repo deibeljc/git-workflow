@@ -2,6 +2,7 @@ pub mod adopt;
 pub mod branch;
 pub mod completions;
 pub mod config;
+pub mod mcp_setup;
 pub mod push;
 pub mod rebase;
 pub mod stack;

@@ -31,6 +31,9 @@ pub enum Commands {
     Config(ConfigArgs),
     /// Generate shell completions
     Completions(CompletionsArgs),
+    /// Set up the MCP server for Claude Code
+    #[command(name = "mcp-setup")]
+    McpSetup,
 }
 
 // -- Stack subcommands --

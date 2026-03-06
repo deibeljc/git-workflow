@@ -17,9 +17,12 @@ fn main() -> Result<()> {
         }
     };
 
-    // Completions don't need a git repo
+    // These don't need a Ctx
     if let Commands::Completions(args) = &command {
         return commands::completions::run(&args.shell);
+    }
+    if let Commands::McpSetup = &command {
+        return commands::mcp_setup::run();
     }
 
     let ctx = Ctx::discover()?;
@@ -57,6 +60,6 @@ fn main() -> Result<()> {
         Commands::Switch(args) => commands::switch::run(args.branch, &ctx),
         Commands::Log(args) => commands::tree::run(&ctx, args.pr),
         Commands::Config(args) => commands::config::run(args.command, &ctx),
-        Commands::Completions(_) => unreachable!(),
+        Commands::Completions(_) | Commands::McpSetup => unreachable!(),
     }
 }
