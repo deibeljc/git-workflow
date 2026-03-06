@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::collections::HashMap;
 
 use crate::cli::SyncArgs;
 use crate::context::Ctx;
@@ -57,10 +58,21 @@ pub fn run(args: SyncArgs, ctx: &Ctx) -> Result<()> {
             continue;
         }
 
-        // Check for merged root branches, tracking the last one removed
-        // so we can use it as the upstream for --onto rebases.
+        // Snapshot each branch's current parent SHA BEFORE removing merged
+        // branches. After removal, parent_of() returns different values
+        // (e.g. the base branch instead of the now-removed parent).
+        let pre_removal_parents: HashMap<String, String> = stack
+            .branches
+            .iter()
+            .filter_map(|b| {
+                let parent = stack.parent_of(&b.name)?;
+                let sha = ctx.git.rev_parse(&parent).ok()?;
+                Some((b.name.clone(), sha))
+            })
+            .collect();
+
+        // Check for merged root branches
         let mut merged_any = false;
-        let mut last_merged_branch: Option<String> = None;
         loop {
             let root = match stack.branches.first() {
                 Some(b) => b.name.clone(),
@@ -78,7 +90,6 @@ pub fn run(args: SyncArgs, ctx: &Ctx) -> Result<()> {
                     "Detected: '{root}' was merged into {}",
                     stack.base_branch
                 ));
-                last_merged_branch = Some(root.clone());
                 stack.branches.remove(0);
                 merged_any = true;
 
@@ -123,21 +134,13 @@ pub fn run(args: SyncArgs, ctx: &Ctx) -> Result<()> {
                 targets.push(parent);
             }
 
-            // After a squash merge, ALL branches need --onto with their
-            // current (pre-rebase) parent as the upstream. This ensures each
-            // branch only replays its own unique commits:
-            //   git rebase --onto <new_parent> <old_parent> <branch>
-            //
-            // Without this, after the first branch gets rebased to new SHAs,
-            // subsequent branches can't find the fork point and replay
-            // already-merged commits, causing conflicts.
+            // Use the pre-removal parent SHAs as --onto upstreams. This is
+            // critical after squash merges: each branch needs to replay only
+            // its own unique commits, not the ones from already-merged parents.
+            // The parents were snapshotted before any branches were removed.
             let upstream_overrides: Vec<Option<String>> = branches
                 .iter()
-                .map(|branch_name| {
-                    // Resolve the current parent to a SHA before any rebasing
-                    let parent = stack.parent_of(branch_name).unwrap();
-                    ctx.git.rev_parse(&parent).ok()
-                })
+                .map(|branch_name| pre_removal_parents.get(branch_name).cloned())
                 .collect();
 
             ui::info(&format!(
