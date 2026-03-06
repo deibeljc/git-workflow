@@ -41,6 +41,19 @@ Your branches are real git branches. Your PRs are normal GitHub PRs. Nothing get
 
 ## Install
 
+### 1. Install the GitHub CLI (strongly recommended)
+
+gw works without it, but you lose squash merge detection, PR status in `gw log --pr`, and anything that talks to GitHub. That's roughly half the functionality. If you're stacking branches for PR review, you almost certainly want this.
+
+```bash
+brew install gh
+gh auth login
+```
+
+See [cli.github.com](https://cli.github.com/) for other install methods.
+
+### 2. Install gw
+
 ```bash
 brew install jondeibel/tap/gw
 ```
@@ -56,8 +69,6 @@ Or build from source (needs a [Rust toolchain](https://rustup.rs/)):
 ```bash
 cargo install --git https://github.com/jondeibel/git-workflow.git
 ```
-
-Optional: `gh` CLI for auto-detecting squash merges and showing PR status in `gw log`.
 
 ### Shell completions
 
