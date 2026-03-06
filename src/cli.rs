@@ -34,6 +34,9 @@ pub enum Commands {
     /// Set up the MCP server for Claude Code
     #[command(name = "mcp-setup")]
     McpSetup,
+    /// Run the MCP server (used by Claude Code, not for direct use)
+    #[command(name = "mcp-server", hide = true)]
+    McpServer,
 }
 
 // -- Stack subcommands --

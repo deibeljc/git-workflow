@@ -24,6 +24,9 @@ fn main() -> Result<()> {
     if let Commands::McpSetup = &command {
         return commands::mcp_setup::run();
     }
+    if let Commands::McpServer = &command {
+        return commands::mcp_server::run();
+    }
 
     let ctx = Ctx::discover()?;
 
@@ -60,6 +63,6 @@ fn main() -> Result<()> {
         Commands::Switch(args) => commands::switch::run(args.branch, &ctx),
         Commands::Log(args) => commands::tree::run(&ctx, args.pr),
         Commands::Config(args) => commands::config::run(args.command, &ctx),
-        Commands::Completions(_) | Commands::McpSetup => unreachable!(),
+        Commands::Completions(_) | Commands::McpSetup | Commands::McpServer => unreachable!(),
     }
 }

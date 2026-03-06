@@ -1,11 +1,11 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use std::path::PathBuf;
 
 use crate::ui;
 
 pub fn run() -> Result<()> {
-    // Find gw-mcp binary
-    let gw_mcp_path = find_gw_mcp()?;
+    // Find the gw binary itself (the MCP server is a subcommand)
+    let gw_path = find_gw()?;
 
     // Find or create .claude/settings.json in the repo root
     let git_root = std::process::Command::new("git")
@@ -13,11 +13,13 @@ pub fn run() -> Result<()> {
         .output()
         .context("failed to find git root")?;
 
-    if !git_root.status.success() {
-        bail!("Not in a git repository.");
-    }
+    let root = if git_root.status.success() {
+        PathBuf::from(String::from_utf8_lossy(&git_root.stdout).trim())
+    } else {
+        // Not in a git repo, use home directory for global config
+        PathBuf::from(std::env::var("HOME").context("HOME not set")?)
+    };
 
-    let root = PathBuf::from(String::from_utf8_lossy(&git_root.stdout).trim());
     let settings_dir = root.join(".claude");
     let settings_path = settings_dir.join("settings.json");
 
@@ -34,7 +36,7 @@ pub fn run() -> Result<()> {
         serde_json::json!({})
     };
 
-    // Set up mcpServers.gw
+    // Set up mcpServers.gw pointing to `gw mcp-server`
     let mcp_servers = settings
         .as_object_mut()
         .context("settings.json is not an object")?
@@ -48,7 +50,8 @@ pub fn run() -> Result<()> {
     servers.insert(
         "gw".to_string(),
         serde_json::json!({
-            "command": gw_mcp_path.to_string_lossy(),
+            "command": gw_path.to_string_lossy(),
+            "args": ["mcp-server"],
         }),
     );
 
@@ -59,18 +62,15 @@ pub fn run() -> Result<()> {
         .with_context(|| format!("failed to write {}", settings_path.display()))?;
 
     ui::success(&format!("MCP server configured at {}", settings_path.display()));
-    ui::info(&format!("Binary: {}", gw_mcp_path.display()));
+    ui::info(&format!("Command: {} mcp-server", gw_path.display()));
     ui::info("Restart Claude Code to pick up the new MCP server.");
 
     Ok(())
 }
 
-fn find_gw_mcp() -> Result<PathBuf> {
-    // Check if gw-mcp is on PATH
-    if let Ok(output) = std::process::Command::new("which")
-        .arg("gw-mcp")
-        .output()
-    {
+fn find_gw() -> Result<PathBuf> {
+    // Check if gw is on PATH (it should be since we're running it)
+    if let Ok(output) = std::process::Command::new("which").arg("gw").output() {
         if output.status.success() {
             let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !path.is_empty() {
@@ -79,16 +79,10 @@ fn find_gw_mcp() -> Result<PathBuf> {
         }
     }
 
-    // Check common cargo install location
-    if let Ok(home) = std::env::var("HOME") {
-        let cargo_bin = PathBuf::from(&home).join(".cargo/bin/gw-mcp");
-        if cargo_bin.exists() {
-            return Ok(cargo_bin);
-        }
+    // Fall back to current executable path
+    if let Ok(exe) = std::env::current_exe() {
+        return Ok(exe);
     }
 
-    bail!(
-        "Could not find gw-mcp binary. Install it first:\n  \
-         cargo install --path mcp-server"
-    );
+    Ok(PathBuf::from("gw"))
 }

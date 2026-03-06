@@ -149,7 +149,7 @@ impl ServerHandler for GwServer {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+pub async fn run() -> anyhow::Result<()> {
     let server = GwServer;
     let service = server
         .serve(rmcp::transport::io::stdio())
