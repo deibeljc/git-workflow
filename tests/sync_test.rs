@@ -246,3 +246,54 @@ fn sync_squash_merge_child_rebases_cleanly() {
     assert_eq!(branch_count, 1, "should have exactly 1 branch, got toml:\n{toml}");
     assert!(toml.contains("name = \"feature-child\""));
 }
+
+#[test]
+fn sync_squash_merge_multi_branch_chain_rebases_cleanly() {
+    let repo = TestRepo::new();
+    let main_branch = repo.current_branch();
+
+    // Create a 3-branch stack: main -> root -> middle -> leaf
+    gw_cmd(&repo.path)
+        .args(["stack", "create", "root"])
+        .assert()
+        .success();
+    repo.commit_file("root.txt", "root content", "root work");
+
+    gw_cmd(&repo.path)
+        .args(["branch", "create", "middle"])
+        .assert()
+        .success();
+    repo.commit_file("middle.txt", "middle content", "middle work");
+
+    gw_cmd(&repo.path)
+        .args(["branch", "create", "leaf"])
+        .assert()
+        .success();
+    repo.commit_file("leaf.txt", "leaf content", "leaf work");
+
+    // Squash merge root into main
+    simulate_squash_merge(&repo, "root", &main_branch);
+
+    repo.git(&["checkout", "leaf"]);
+
+    // Sync should rebase both middle and leaf cleanly without conflicts.
+    // This tests that ALL branches get --onto, not just the new root.
+    gw_cmd(&repo.path)
+        .args(["sync", "--merged", "root"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("'root' was merged"))
+        .stdout(predicate::str::contains("synced"));
+
+    // Both remaining branches should have their files
+    repo.git(&["checkout", "middle"]);
+    assert!(repo.path.join("middle.txt").exists(), "middle.txt should exist");
+
+    repo.git(&["checkout", "leaf"]);
+    assert!(repo.path.join("leaf.txt").exists(), "leaf.txt should exist");
+
+    // Stack should have 2 branches left
+    let toml = repo.read_stack_toml("root");
+    let branch_count = toml.matches("[[branches]]").count();
+    assert_eq!(branch_count, 2, "should have 2 branches, got toml:\n{toml}");
+}

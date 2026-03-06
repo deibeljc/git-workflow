@@ -37,7 +37,8 @@ _gw() {
     'sync:Sync stacks with the base branch'
     'push:Push the current branch'
     'switch:Switch to a branch tracked by gw'
-    'tree:Show tree visualization of all stacks'
+    'log:Show log of all stacks with branches and commits'
+    'tree:Alias for log'
     'config:Configure gw settings'
     'completions:Generate shell completions'
   )
@@ -116,7 +117,7 @@ _gw() {
         switch)
           _arguments '1:branch:_gw_branches'
           ;;
-        tree)
+        log|tree)
           _arguments '--pr[Show PR status]'
           ;;
         config)
@@ -164,7 +165,7 @@ _gw() {
   local cur prev words cword
   _init_completion || return
 
-  local commands="stack branch adopt rebase sync push switch tree config completions"
+  local commands="stack branch adopt rebase sync push switch log tree config completions"
   local stack_commands="create delete list"
   local branch_commands="create remove"
   local config_commands="set-base show"
@@ -278,7 +279,8 @@ complete -c gw -f -n __gw_needs_command -a rebase -d 'Propagate rebases'
 complete -c gw -f -n __gw_needs_command -a sync -d 'Sync with base branch'
 complete -c gw -f -n __gw_needs_command -a push -d 'Push current branch'
 complete -c gw -f -n __gw_needs_command -a switch -d 'Switch branches'
-complete -c gw -f -n __gw_needs_command -a tree -d 'Show stacks'
+complete -c gw -f -n __gw_needs_command -a log -d 'Show stacks'
+complete -c gw -f -n __gw_needs_command -a tree -d 'Alias for log'
 complete -c gw -f -n __gw_needs_command -a config -d 'Configure settings'
 complete -c gw -f -n __gw_needs_command -a completions -d 'Generate completions'
 
@@ -315,6 +317,7 @@ complete -c gw -f -n '__gw_using_command push' -l yes -d 'Skip confirmation'
 complete -c gw -f -n '__gw_using_command switch' -a '(__gw_branches)'
 
 # tree
+complete -c gw -f -n '__gw_using_command log' -l pr -d 'Show PR status'
 complete -c gw -f -n '__gw_using_command tree' -l pr -d 'Show PR status'
 
 # config

@@ -24,8 +24,9 @@ pub enum Commands {
     Push(PushArgs),
     /// Switch to a branch tracked by gw
     Switch(SwitchArgs),
-    /// Show tree visualization of all stacks
-    Tree(TreeArgs),
+    /// Show log of all stacks with branches and commits
+    #[command(alias = "tree")]
+    Log(TreeArgs),
     /// Configure gw settings
     Config(ConfigArgs),
     /// Generate shell completions

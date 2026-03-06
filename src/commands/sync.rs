@@ -121,14 +121,22 @@ pub fn run(args: SyncArgs, ctx: &Ctx) -> Result<()> {
                 targets.push(parent);
             }
 
-            // The new root needs --onto to skip already-merged commits.
-            // git rebase --onto <base> <last_merged_branch> <new_root>
-            // This replays only the commits unique to new_root, not the
-            // ones from the merged branch that are already in base via squash.
-            let mut upstream_overrides: Vec<Option<String>> = vec![None; branches.len()];
-            if let Some(ref old_parent) = last_merged_branch {
-                upstream_overrides[0] = Some(old_parent.clone());
-            }
+            // After a squash merge, ALL branches need --onto with their
+            // current (pre-rebase) parent as the upstream. This ensures each
+            // branch only replays its own unique commits:
+            //   git rebase --onto <new_parent> <old_parent> <branch>
+            //
+            // Without this, after the first branch gets rebased to new SHAs,
+            // subsequent branches can't find the fork point and replay
+            // already-merged commits, causing conflicts.
+            let upstream_overrides: Vec<Option<String>> = branches
+                .iter()
+                .map(|branch_name| {
+                    // Resolve the current parent to a SHA before any rebasing
+                    let parent = stack.parent_of(branch_name).unwrap();
+                    ctx.git.rev_parse(&parent).ok()
+                })
+                .collect();
 
             ui::info(&format!(
                 "Rebasing {} branch{} onto {}...",

@@ -268,7 +268,7 @@ fn help_flag_works() {
         .stdout(predicate::str::contains("rebase"))
         .stdout(predicate::str::contains("sync"))
         .stdout(predicate::str::contains("push"))
-        .stdout(predicate::str::contains("tree"));
+        .stdout(predicate::str::contains("log"));
 }
 
 #[test]
