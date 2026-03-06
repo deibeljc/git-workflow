@@ -19,12 +19,12 @@ Everything lives in `.git/gw/` and never gets pushed to the remote.
 ## Install
 
 ```
-git clone https://github.com/yourusername/gw.git
-cd gw
+git clone https://github.com/deibeljc/git-workflow.git
+cd git-workflow
 cargo install --path .
 ```
 
-Needs a [Rust toolchain](https://rustup.rs/). Optional: `gh` CLI for auto-detecting squash merges and showing PR status in `gw tree`.
+Needs a [Rust toolchain](https://rustup.rs/). Optional: `gh` CLI for auto-detecting squash merges and showing PR status in `gw log`.
 
 ### Shell completions
 
@@ -32,13 +32,33 @@ Tab completion for commands, flags, and branch names:
 
 ```bash
 # zsh (add to ~/.zshrc)
-eval "$(gw completions zsh)"
+source <(gw completions zsh)
 
 # bash (add to ~/.bashrc)
 eval "$(gw completions bash)"
 
 # fish
 gw completions fish | source
+```
+
+### MCP server (Claude Code integration)
+
+`gw` ships with an MCP server so AI assistants can manage your stacks directly.
+
+```bash
+cargo install --path mcp-server
+```
+
+Add to your Claude Code settings (`.claude/settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "gw": {
+      "command": "gw-mcp"
+    }
+  }
+}
 ```
 
 ## Quick start
@@ -53,8 +73,8 @@ gw stack create auth
 # Do work, commit, then add the next branch
 gw branch create auth-tests
 
-# See everything
-gw tree
+# See everything (just `gw` also works)
+gw log
 
 # Address PR feedback on auth, then propagate rebases
 gw rebase
@@ -64,6 +84,9 @@ gw push
 
 # After auth gets squash-merged
 gw sync
+
+# Explicitly rebase onto latest base when you're ready
+gw sync --rebase
 
 # Switch between branches interactively
 gw switch
@@ -85,6 +108,9 @@ This is the easiest way to migrate onto gw. You keep all your existing branches 
 
 | Command | What it does |
 | --- | --- |
+| `gw` | Show all stacks (alias for `gw log`) |
+| `gw log` | Show all stacks with branches and commits |
+| `gw log --pr` | Include PR status from GitHub |
 | `gw stack create <name>` | Create a new stack off the base branch |
 | `gw stack delete <name>` | Remove stack metadata (branches stay) |
 | `gw stack list` | List all stacks |
@@ -94,11 +120,11 @@ This is the easiest way to migrate onto gw. You keep all your existing branches 
 | `gw rebase` | Propagate rebases to descendants |
 | `gw rebase --continue` | Resume after resolving conflicts |
 | `gw rebase --abort` | Roll back all branches |
-| `gw sync` | Pull base, detect merges, rebase stack |
+| `gw sync` | Fetch base, detect merges, rebase stack |
+| `gw sync --rebase` | Explicitly rebase stack onto latest base |
 | `gw sync --merged <branch>` | Manually indicate a branch was merged |
 | `gw push` | Push the current branch |
 | `gw switch [branch]` | Switch branches interactively or by name |
-| `gw tree` | Show all stacks with branches and commits |
-| `gw tree --pr` | Include PR status from GitHub |
 | `gw config set-base <branch>` | Set the default base branch |
 | `gw config show` | Show current configuration |
+| `gw completions <shell>` | Generate shell completions (zsh/bash/fish) |
