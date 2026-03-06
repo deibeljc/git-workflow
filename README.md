@@ -10,7 +10,9 @@ Everything lives in `.git/gw/` and never gets pushed to the remote.
 
 The core problem is that GitHub's PR workflow assumes branches are independent. When you stack them, you're fighting the tool. Every commit to an upstream branch means manually rebasing everything downstream. Every squash merge means figuring out what landed, removing the merged branch, and rebasing again. The overhead scales with the number of branches in the chain, and it gets painful fast.
 
-Existing tools solve this but they all ask you to give something up.
+There's also a subtler problem that most stacking tools ignore: force pushing. When a tool automatically rebases your stack onto the latest base branch, every branch in the chain gets new SHAs and needs a force push. GitHub treats force pushes poorly in reviews. Your reviewer's "viewed" state resets, inline comments get orphaned, and the diff becomes harder to follow because GitHub can't cleanly track what changed between the old and new versions of a force-pushed branch. If you're stacking PRs to make review easier, a tool that force pushes your whole stack every time someone merges to main is actively working against that goal.
+
+Existing tools solve the rebase automation but they all ask you to give something up.
 
 **Graphite** is a full platform. It requires a cloud account, wraps your push workflow through their service, and adds a dashboard on top of GitHub. If you're on a team that's bought in, it works great. But if you just want the rebase automation without adding a SaaS dependency to your git workflow, it's a lot of overhead for what should be a local operation.
 
@@ -19,6 +21,8 @@ Existing tools solve this but they all ask you to give something up.
 **git-branchless** is powerful but it's a different mental model entirely. It's inspired by Mercurial and Phabricator, and it reimagines git around changes rather than branches. If your team already does one-branch-per-PR and squash-merges into a base branch, that abstraction doesn't map cleanly to your existing workflow, and you're learning a new way of thinking about git on top of learning the tool.
 
 `gw` is intentionally boring. Your branches are real git branches. Your PRs are normal GitHub PRs. Your reviewers see normal diffs. Nothing gets rewritten, nothing gets synced to a cloud service, and the mental model is the same one you already have. It just automates the tedious parts: propagating rebases through the chain, detecting squash merges, and cleaning up the stack when branches land.
+
+Critically, `gw sync` does not rebase your stack onto the latest base branch unless a branch was actually merged or you explicitly ask for it with `--rebase`. Your stack stays pinned to the base commit it started from, which means your open PRs don't get force pushed just because someone else merged to main. When you do need to update, you control when that happens.
 
 ## Install
 
