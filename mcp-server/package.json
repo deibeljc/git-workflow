@@ -4,12 +4,16 @@
   "description": "MCP server exposing gw stacked branch operations as tools",
   "type": "module",
   "main": "src/index.ts",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.0.0"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
