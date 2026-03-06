@@ -29,6 +29,9 @@ pub fn run(args: SyncArgs, ctx: &Ctx) -> Result<()> {
         return Ok(());
     }
 
+    // Prune deleted remote branches
+    let _ = ctx.git.run(&["fetch", "--prune", "origin"]);
+
     // Batch PR status once for all merge detection
     let pr_map = gh::batch_pr_status();
 
@@ -40,7 +43,7 @@ pub fn run(args: SyncArgs, ctx: &Ctx) -> Result<()> {
         // Fetch and update base branch (once per unique base)
         if synced_bases.insert(base.clone()) {
             ui::info(&format!("Fetching {base}..."));
-            match ctx.git.run(&["fetch", "--prune", "origin", base]) {
+            match ctx.git.fetch_branch("origin", base) {
                 Ok(_) => {
                     if let Err(e) = ctx.git.update_local_ref(base, &format!("origin/{base}")) {
                         ui::warn(&format!("Could not update local ref for {base}: {e}"));
