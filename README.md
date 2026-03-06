@@ -21,21 +21,23 @@ Everything lives in `.git/gw/` and never gets pushed to the remote.
 
 ## Why this exists
 
-Stacking PRs is the best way to ship large features. You break the work into small, reviewable pieces that build on each other, and your reviewers get focused diffs instead of a 2,000 line monster PR. The problem is that git and GitHub don't know your branches are related, so every time you update one branch in the middle of the chain, you're stuck manually rebasing everything that comes after it. And when a PR gets squash-merged, you have to untangle which commits landed, remove the branch, and rebase the rest onto the updated base. It's the kind of work that should take zero thought but ends up eating real time and creating real mistakes.
+If you stack branches, you know the pain. You update a branch in the middle of the chain and now you have to rebase everything after it. A PR gets squash-merged and you have to figure out what landed, remove the branch, and rebase the rest. It's all manual, it's error-prone, and it scales with the number of branches in the chain.
 
-The force push problem makes it worse. Most stacking tools automatically rebase your entire stack onto the latest base branch whenever you sync. That means every branch gets new SHAs and needs a force push. GitHub handles force pushes badly in reviews: your reviewer's "viewed" state resets, inline comments get orphaned, and the diff becomes impossible to follow because GitHub can't track what actually changed between the old and new versions of a force-pushed branch. You're stacking PRs to make review easier, and the tool is actively making it harder.
+There's also the force push problem. Most stacking tools auto-rebase your entire stack onto the latest base branch when you sync. Every branch gets new SHAs and needs a force push. GitHub resets your reviewer's "viewed" state on force pushes, orphans inline comments, and loses the ability to show what changed between review rounds. So you end up making review harder in the name of keeping your stack up to date.
 
-There are good tools out there, but they each come with a tradeoff that doesn't sit right for teams already deep in GitHub's workflow.
+### Alternatives
 
-**Graphite** works well if your whole team buys in, but it requires a cloud account, wraps your push workflow through their service, and adds a dashboard layer on top of GitHub. For what should be a local git operation, that's a lot of surface area and a SaaS dependency you might not want.
+**Graphite** has both a cloud platform and a local CLI. The local tool works but you end up working around its assumptions about how your workflow should look, and the cloud features keep pulling you toward their platform for the full experience.
 
-**ghstack** is clever but it rewrites your branches into synthetic ones that GitHub can display as individual PRs. What's on your machine doesn't match what's on GitHub, and that impedance mismatch gets confusing when you're debugging a rebase or trying to understand why a PR diff looks different than what you see locally.
+**ghstack** rewrites your branches into synthetic ones for GitHub to display as individual PRs. What's on your machine doesn't match what's on GitHub, and that gets confusing when you're debugging a rebase or a PR diff doesn't look like what you see locally.
 
-**git-branchless** is powerful but it's a fundamentally different way of thinking about git. It's inspired by Mercurial and Phabricator, and if your team already does one-branch-per-PR with squash merges, that abstraction doesn't map to your workflow without rewiring your mental model.
+**git-branchless** is close to what you want but the squash merge detection falls over most of the time, which leaves you doing the manual cleanup work anyways. It's also a different mental model entirely, inspired by Mercurial and Phabricator, and if your team already does one-branch-per-PR with squash merges that abstraction doesn't map cleanly.
 
-`gw` takes a different approach. Your branches are real git branches. Your PRs are normal GitHub PRs. Your reviewers see normal diffs. Nothing gets rewritten and nothing gets synced to a cloud service. It just handles the grunt work: propagating rebases through the chain when you push fixes, detecting squash merges when PRs land, and cleaning up the stack so you don't have to.
+### What gw does
 
-The key design decision is that `gw sync` does not rebase your stack onto the latest base branch unless a branch was actually merged or you explicitly ask for it with `--rebase`. Your stack stays pinned to the base commit it was created from. That means your open PRs don't get force pushed just because someone else merged to main, and your reviewers' progress doesn't get blown away. When you do want to update, you decide when.
+Your branches are real git branches. Your PRs are normal GitHub PRs. Nothing gets rewritten and nothing gets synced anywhere. gw just handles propagating rebases through the chain, detecting squash merges, and cleaning up the stack.
+
+`gw sync` does not rebase your stack onto the latest base branch unless a branch was actually merged or you explicitly pass `--rebase`. Your stack stays pinned, your open PRs don't get force pushed because someone else merged to main, and you control when updates happen.
 
 ## Install
 
