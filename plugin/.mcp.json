@@ -1,0 +1,6 @@
+{
+  "gw": {
+    "command": "gw",
+    "args": ["mcp-serve"]
+  }
+}
