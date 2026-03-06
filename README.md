@@ -42,7 +42,7 @@ Your branches are real git branches. Your PRs are normal GitHub PRs. Nothing get
 ## Install
 
 ```
-git clone https://github.com/deibeljc/git-workflow.git
+git clone https://github.com/jondeibel/git-workflow.git
 cd git-workflow
 cargo install --path .
 ```
@@ -64,28 +64,18 @@ eval "$(gw completions bash)"
 gw completions fish | source
 ```
 
-### Claude Code plugin
+### Claude Code
 
-The fastest way to get gw working with Claude Code. The plugin installs the MCP server and a skill that teaches Claude when to use gw instead of raw git.
-
-In Claude Code, run these slash commands:
+gw has a plugin that sets up everything for Claude Code in one shot: the MCP tools for managing stacks and a skill that teaches Claude when to use gw instead of raw git.
 
 ```
 /plugin marketplace add jondeibel/git-workflow
 /plugin install gw@git-workflow
 ```
 
-Restart Claude Code and you're good to go. Claude will automatically use gw tools for branch management, pushing, rebasing, and syncing.
+Restart Claude Code and you're good to go. Claude will automatically use gw for branch management, pushing, rebasing, and syncing.
 
-### Manual MCP setup
-
-If you'd rather skip the plugin and just get the MCP tools, you can set it up with one command:
-
-```bash
-gw mcp-setup
-```
-
-This writes the MCP config to `.mcp.json` and gives Claude access to gw tools directly. You won't get the skill that guides Claude on when to use gw vs raw git, but the tools will work.
+If you'd rather just get the MCP tools without the plugin system, run `gw mcp-setup` to write the config to `.mcp.json`.
 
 ## Quick start
 
