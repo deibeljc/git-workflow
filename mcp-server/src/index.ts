@@ -3,11 +3,17 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { execSync } from "child_process";
 
-function gw(args: string): string {
+function gw(args: string, cwd?: string): string {
   try {
-    return execSync(`gw ${args}`, { encoding: "utf-8", timeout: 30000 }).trim();
+    return execSync(`gw ${args}`, {
+      encoding: "utf-8",
+      timeout: 30000,
+      cwd: cwd || process.cwd(),
+    }).trim();
   } catch (e: any) {
-    throw new Error(e.stderr || e.message);
+    const stderr = e.stderr?.trim();
+    const stdout = e.stdout?.trim();
+    throw new Error(stderr || stdout || e.message);
   }
 }
 
