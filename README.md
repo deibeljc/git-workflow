@@ -6,6 +6,10 @@ You break a big feature into multiple PRs. You push the first one for review, ge
 
 Everything lives in `.git/gw/` and never gets pushed to the remote.
 
+<p align="center">
+  <img src="docs/gw-tree.png" alt="gw log output showing three stacks with branches and commits" width="640">
+</p>
+
 ## Why this exists
 
 The core problem is that GitHub's PR workflow assumes branches are independent. When you stack them, you're fighting the tool. Every commit to an upstream branch means manually rebasing everything downstream. Every squash merge means figuring out what landed, removing the merged branch, and rebasing again. The overhead scales with the number of branches in the chain, and it gets painful fast.
