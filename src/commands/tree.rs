@@ -402,6 +402,7 @@ fn format_branch_line(
         match ri.remote_status {
             RemoteStatus::Diverged => tags.push("diverged".yellow().to_string()),
             RemoteStatus::NeedsPush => tags.push("needs push".yellow().to_string()),
+            RemoteStatus::Behind => tags.push("behind remote".yellow().to_string()),
             _ => {}
         }
     }
@@ -425,6 +426,7 @@ fn format_branch_line(
 enum RemoteStatus {
     UpToDate,
     NeedsPush,
+    Behind,
     Diverged,
     NoRemote,
 }
@@ -460,10 +462,14 @@ fn batch_ref_info(ctx: &Ctx) -> HashMap<String, RefInfo> {
             RemoteStatus::NoRemote
         } else if track.is_empty() {
             RemoteStatus::UpToDate
+        } else if track.contains("gone") {
+            RemoteStatus::NoRemote
         } else if track.contains("ahead") && track.contains("behind") {
             RemoteStatus::Diverged
         } else if track.contains("ahead") {
             RemoteStatus::NeedsPush
+        } else if track.contains("behind") {
+            RemoteStatus::Behind
         } else {
             RemoteStatus::UpToDate
         };

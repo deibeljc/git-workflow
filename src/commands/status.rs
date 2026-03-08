@@ -30,8 +30,13 @@ pub fn run(ctx: &Ctx) -> Result<()> {
     // Gather git info
     let merge_base = ctx.git.merge_base(&parent, &current)?;
     let commits = ctx.git.log_oneline(&merge_base, "HEAD", 100)?;
-    let parent_sha = ctx.git.rev_parse(&parent)?;
-    let needs_rebase = merge_base != parent_sha;
+    let behind_parent: usize = ctx
+        .git
+        .run(&["rev-list", "--count", &format!("{merge_base}..{parent}")])
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(0);
+    let needs_rebase = behind_parent > 0;
 
     // Remote status
     let remote_status = remote_info(ctx, &current);
@@ -127,8 +132,15 @@ pub fn run(ctx: &Ctx) -> Result<()> {
         RemoteStatus::NeedsPush(ahead) => {
             flags.push(format!("{}", format!("{ahead} ahead, needs push").yellow()));
         }
-        RemoteStatus::Diverged => {
-            flags.push(format!("{}", "diverged from remote".yellow()));
+        RemoteStatus::Behind(behind) => {
+            flags.push(format!("{}", format!("{behind} behind remote").yellow()));
+        }
+        RemoteStatus::Diverged { ahead, behind } => {
+            flags.push(
+                format!("diverged ({ahead} ahead, {behind} behind remote)")
+                    .yellow()
+                    .to_string(),
+            );
         }
         RemoteStatus::NoRemote => {
             flags.push(format!("{}", "not pushed".dimmed()));
@@ -136,7 +148,11 @@ pub fn run(ctx: &Ctx) -> Result<()> {
     }
 
     if needs_rebase {
-        flags.push(format!("{}", "needs rebase".yellow()));
+        flags.push(
+            format!("{behind_parent} behind parent, needs rebase")
+                .yellow()
+                .to_string(),
+        );
     }
 
     for flag in &flags {
@@ -196,7 +212,8 @@ fn working_tree_info(ctx: &Ctx) -> WorkingTree {
 enum RemoteStatus {
     UpToDate,
     NeedsPush(usize),
-    Diverged,
+    Behind(usize),
+    Diverged { ahead: usize, behind: usize },
     NoRemote,
 }
 
@@ -224,19 +241,48 @@ fn remote_info(ctx: &Ctx, branch: &str) -> RemoteStatus {
         return RemoteStatus::UpToDate;
     }
 
+    if track.contains("gone") {
+        return RemoteStatus::NoRemote;
+    }
+
     if track.contains("ahead") && track.contains("behind") {
-        return RemoteStatus::Diverged;
+        let ahead = parse_count_after(track, "ahead ");
+        let behind = parse_count_after(track, "behind ");
+        return RemoteStatus::Diverged { ahead, behind };
     }
 
     if track.contains("ahead") {
-        // Parse the number from "[ahead N]"
-        let ahead = track
-            .split("ahead ")
-            .nth(1)
-            .and_then(|s| s.trim_end_matches(']').parse::<usize>().ok())
-            .unwrap_or(1);
+        let ahead = parse_count_after(track, "ahead ");
         return RemoteStatus::NeedsPush(ahead);
     }
 
+    if track.contains("behind") {
+        let behind = parse_count_after(track, "behind ");
+        return RemoteStatus::Behind(behind);
+    }
+
     RemoteStatus::UpToDate
+}
+
+fn parse_count_after(s: &str, prefix: &str) -> usize {
+    s.split(prefix)
+        .nth(1)
+        .and_then(|rest| rest.split(|c: char| !c.is_ascii_digit()).next())
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_count_after() {
+        assert_eq!(parse_count_after("[ahead 3]", "ahead "), 3);
+        assert_eq!(parse_count_after("[behind 7]", "behind "), 7);
+        assert_eq!(parse_count_after("[ahead 2, behind 5]", "ahead "), 2);
+        assert_eq!(parse_count_after("[ahead 2, behind 5]", "behind "), 5);
+        assert_eq!(parse_count_after("[ahead 100]", "ahead "), 100);
+        assert_eq!(parse_count_after("garbage", "ahead "), 1); // fallback
+    }
 }
