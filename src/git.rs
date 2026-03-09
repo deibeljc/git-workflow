@@ -61,6 +61,31 @@ impl Git {
         Ok(Self::new(PathBuf::from(path.trim())))
     }
 
+    /// Discover the repo and get the current branch in a single subprocess.
+    pub fn discover_with_branch() -> Result<(Self, String)> {
+        let output = Command::new("git")
+            .args(["rev-parse", "--show-toplevel", "--abbrev-ref", "HEAD"])
+            .output()
+            .context("failed to execute git")?;
+
+        if !output.status.success() {
+            return Err(anyhow!(
+                "Not a git repository. Run `git init` first."
+            ));
+        }
+
+        let stdout =
+            String::from_utf8(output.stdout).context("git output was not valid UTF-8")?;
+        let mut lines = stdout.lines();
+        let path = lines
+            .next()
+            .ok_or_else(|| anyhow!("missing repo path from git rev-parse"))?;
+        let branch = lines
+            .next()
+            .ok_or_else(|| anyhow!("missing branch from git rev-parse"))?;
+        Ok((Self::new(PathBuf::from(path)), branch.to_string()))
+    }
+
     /// Run a git command and return stdout as a trimmed string.
     /// Uses array-form arguments to prevent command injection.
     pub fn run(&self, args: &[&str]) -> Result<String> {

@@ -19,6 +19,16 @@ impl Ctx {
     /// Discover the git repo and set up gw paths.
     pub fn discover() -> Result<Self> {
         let git = Git::discover()?;
+        Self::from_git(git)
+    }
+
+    /// Discover the git repo and current branch in a single subprocess.
+    pub fn discover_with_branch() -> Result<(Self, String)> {
+        let (git, branch) = Git::discover_with_branch()?;
+        Ok((Self::from_git(git)?, branch))
+    }
+
+    fn from_git(git: Git) -> Result<Self> {
         let gw_dir = git.repo_path().join(".git").join("gw");
         let stacks_dir = gw_dir.join("stacks");
         let state_path = gw_dir.join("state.toml");
