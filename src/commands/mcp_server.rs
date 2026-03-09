@@ -140,6 +140,46 @@ impl GwServer {
     fn gw_force_push(&self) -> String {
         gw(&["push", "--yes"]).unwrap_or_else(|e| format!("{e}"))
     }
+
+    #[tool(description = "Split the current branch into a stack of focused branches using a plan file. The plan is a series of 'pick <full-40-char-sha> <branch-name>' lines. Commits are grouped by branch name, and each unique branch name becomes a branch in the new stack. Requires at least 2 branches. Before calling this, use git log to get the full SHAs of the commits on the current branch.")]
+    fn gw_split(
+        &self,
+        #[tool(param)]
+        #[schemars(description = "Plan file content: lines of 'pick <full-sha> <branch-name>'. Example:\npick abc123...def456 feature-models\npick 789abc...012def feature-api")]
+        plan: String,
+        #[tool(param)]
+        #[schemars(description = "Optional stack name (defaults to current branch name)")]
+        name: Option<String>,
+    ) -> String {
+        // Write plan to a temp file
+        let tmp = std::env::temp_dir().join(format!("gw-split-{}.txt", std::process::id()));
+        if let Err(e) = std::fs::write(&tmp, &plan) {
+            return format!("Failed to write plan file: {e}");
+        }
+
+        let tmp_str = tmp.to_string_lossy().to_string();
+        let mut args = vec!["split", "--plan", &tmp_str, "--yes"];
+        let name_val;
+        if let Some(ref n) = name {
+            name_val = n.clone();
+            args.push("--name");
+            args.push(&name_val);
+        }
+
+        let result = gw(&args).unwrap_or_else(|e| format!("{e}"));
+        let _ = std::fs::remove_file(&tmp);
+        result
+    }
+
+    #[tool(description = "Continue a split after resolving cherry-pick conflicts. Resolve conflicts, git add the files, then call this.")]
+    fn gw_split_continue(&self) -> String {
+        gw(&["split", "--continue"]).unwrap_or_else(|e| format!("{e}"))
+    }
+
+    #[tool(description = "Abort a split in progress and roll back all created branches")]
+    fn gw_split_abort(&self) -> String {
+        gw(&["split", "--abort"]).unwrap_or_else(|e| format!("{e}"))
+    }
 }
 
 #[tool(tool_box)]

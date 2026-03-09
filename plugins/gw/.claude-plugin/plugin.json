@@ -1,5 +1,5 @@
 {
-  "name": "gw",
+  "name": "git-workflow",
   "description": "Stacked branch management for Claude Code. Teaches Claude to use gw for branch creation, pushing, rebasing, and syncing instead of raw git commands. Includes MCP tools for direct stack manipulation.",
   "author": {
     "name": "Jon Deibel"

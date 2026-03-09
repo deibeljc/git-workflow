@@ -9,7 +9,7 @@ description: >
   work into pieces, rebase, sync with main, or any git workflow operation.
   DO NOT TRIGGER when: reading files, running tests, editing code with no git
   intent.
-allowed-tools: Bash, Read, Edit, Write, Glob, Grep, mcp__gw__gw_stack_create, mcp__gw__gw_stack_list, mcp__gw__gw_stack_delete, mcp__gw__gw_branch_create, mcp__gw__gw_branch_remove, mcp__gw__gw_log, mcp__gw__gw_log_pr, mcp__gw__gw_push, mcp__gw__gw_rebase, mcp__gw__gw_rebase_continue, mcp__gw__gw_rebase_abort, mcp__gw__gw_sync, mcp__gw__gw_sync_rebase, mcp__gw__gw_sync_merged, mcp__gw__gw_switch, mcp__github__create_pull_request
+allowed-tools: Bash, Read, Edit, Write, Glob, Grep, mcp__gw__gw_stack_create, mcp__gw__gw_stack_list, mcp__gw__gw_stack_delete, mcp__gw__gw_branch_create, mcp__gw__gw_branch_remove, mcp__gw__gw_log, mcp__gw__gw_log_pr, mcp__gw__gw_push, mcp__gw__gw_force_push, mcp__gw__gw_rebase, mcp__gw__gw_rebase_continue, mcp__gw__gw_rebase_abort, mcp__gw__gw_sync, mcp__gw__gw_sync_rebase, mcp__gw__gw_sync_merged, mcp__gw__gw_switch, mcp__gw__gw_split, mcp__gw__gw_split_continue, mcp__gw__gw_split_abort, mcp__github__create_pull_request
 ---
 
 # Git Workflow with gw
@@ -37,6 +37,7 @@ You are working in a repo that uses **gw**, a stacked branch manager. Use gw too
 - **Rebasing** - `gw_rebase` instead of `git rebase` (propagates to descendants)
 - **Syncing with base** - `gw_sync` instead of `git pull --rebase`
 - **Viewing branch state** - `gw_log` instead of `git branch`
+- **Splitting branches** - `gw_split` to decompose a fat branch into a stack
 
 ## Workflow Patterns
 
@@ -58,14 +59,45 @@ When the user has a large change or asks to split work into reviewable pieces:
 4. Repeat until done
 5. Each branch becomes its own PR, stacked on the previous one
 
-**If the work is already on a single branch:**
-1. Use `gw split` to decompose the existing branch into a clean stack
-2. The interactive TUI lets you assign each commit to a named bucket/branch
-3. Or use `gw split --plan <file>` with a plan file for scripting
-4. Cherry-pick conflicts can be resolved with `gw split --continue`
-5. Use `gw split --abort` to roll back if needed
+**If the work is already on a single branch (use gw_split):**
 
-Good stack boundaries: model/schema changes, API/service layer, UI/frontend, tests, migrations. Each branch should be independently reviewable and tell a coherent story.
+This is the most common case when refactoring after the fact. Follow these steps precisely:
+
+1. **Get the commits** on the current branch using `git log --format='%H %s' <base>..HEAD` where `<base>` is the branch you branched from (usually `main` or `dev`). You need the full 40-character SHAs.
+
+2. **Design the split** by grouping commits into logical units. Good boundaries:
+   - Model/schema changes
+   - API/service layer
+   - UI/frontend
+   - Tests
+   - Migrations
+   Each group becomes a branch. Every commit must be assigned to exactly one branch.
+
+3. **Build the plan** as a string with one line per commit:
+   ```
+   pick <full-sha> <branch-name>
+   pick <full-sha> <branch-name>
+   pick <full-sha> <other-branch>
+   ```
+   Commits assigned to the same branch-name are grouped together. The first unique branch name becomes the root of the stack, the second becomes its child, etc.
+
+4. **Call `gw_split`** with the plan string and optionally a stack name.
+
+5. **If conflicts occur**, resolve them:
+   - Check `git status` to see conflicted files
+   - Read and resolve the conflicts
+   - Stage resolved files with `git add`
+   - Call `gw_split_continue` to resume
+   - If things go wrong, `gw_split_abort` rolls back everything
+
+**Example split plan for a branch with 4 commits:**
+```
+pick a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0 feature-models
+pick b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1 feature-models
+pick c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2 feature-api
+pick d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3 feature-tests
+```
+This creates a 3-branch stack: `feature-models` (2 commits) → `feature-api` (1 commit) → `feature-tests` (1 commit).
 
 ### Pushing work
 
@@ -112,3 +144,5 @@ Use `gw_log_pr` to see PR status for all branches in the stack.
 4. **Check `gw_log` first** before creating new branches to understand the current stack state.
 5. **One concern per branch** - each branch in a stack should have a clear, reviewable purpose.
 6. **Commit with git, manage with gw** - this is the fundamental split.
+7. **Full SHAs in split plans** - `gw_split` requires 40-character commit SHAs, not short hashes.
+8. **Every commit must be assigned** - a split plan must cover all commits on the branch and use at least 2 branch names.
