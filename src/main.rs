@@ -13,7 +13,7 @@ fn main() -> Result<()> {
         Some(cmd) => cmd,
         None => {
             let ctx = Ctx::discover()?;
-            return commands::tree::run(&ctx, false);
+            return commands::tree::run(&ctx, cli.pr);
         }
     };
 

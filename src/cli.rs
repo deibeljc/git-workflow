@@ -6,6 +6,10 @@ use clap::{Args, Parser, Subcommand};
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
+
+    /// Show PR status (shortcut for `gw log --pr`)
+    #[arg(long, global = true)]
+    pub pr: bool,
 }
 
 #[derive(Subcommand)]
