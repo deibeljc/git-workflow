@@ -7,33 +7,53 @@ pub struct PrInfo {
     pub state: String,
 }
 
-/// Batch-fetch PR status for all branches via a single gh CLI call.
+/// Fetch PR status for the given branches via parallel gh CLI calls.
+/// Each branch gets its own `gh pr list --head <branch>` query, spawned
+/// concurrently so the total latency is ~one network round-trip.
 /// Returns a map of branch_name -> PrInfo.
 /// Returns empty map if gh is not available or fails.
-pub fn batch_pr_status() -> HashMap<String, PrInfo> {
+pub fn batch_pr_status(branches: &[&str]) -> HashMap<String, PrInfo> {
     let mut result = HashMap::new();
+    if branches.is_empty() {
+        return result;
+    }
 
-    let output = Command::new("gh")
-        .args([
-            "pr", "list", "--state", "all", "--json",
-            "headRefName,number,state", "--limit", "100",
-        ])
-        .output();
+    // Spawn all queries in parallel
+    let children: Vec<(&str, Option<std::process::Child>)> = branches
+        .iter()
+        .map(|&branch| {
+            let child = Command::new("gh")
+                .args([
+                    "pr", "list", "--head", branch, "--state", "all", "--json",
+                    "number,state", "--limit", "1",
+                ])
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .ok();
+            (branch, child)
+        })
+        .collect();
 
-    let output = match output {
-        Ok(o) if o.status.success() => o,
-        _ => return result,
-    };
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    for chunk in stdout.split('{') {
-        if let (Some(branch), Some(number), Some(state)) = (
-            extract_json_string(chunk, "headRefName"),
-            extract_json_number(chunk, "number"),
-            extract_json_string(chunk, "state"),
-        ) {
-            result.insert(branch, PrInfo { number, state });
+    // Collect results
+    for (branch, child) in children {
+        let Some(child) = child else { continue };
+        let Ok(output) = child.wait_with_output() else {
+            continue;
+        };
+        if !output.status.success() {
+            continue;
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Parse the first (and only) result from the JSON array
+        for chunk in stdout.split('{') {
+            if let (Some(number), Some(state)) = (
+                extract_json_number(chunk, "number"),
+                extract_json_string(chunk, "state"),
+            ) {
+                result.insert(branch.to_string(), PrInfo { number, state });
+                break;
+            }
         }
     }
 

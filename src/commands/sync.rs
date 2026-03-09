@@ -33,7 +33,11 @@ pub fn run(args: SyncArgs, ctx: &Ctx) -> Result<()> {
     let _ = ctx.git.run(&["fetch", "--prune", "origin"]);
 
     // Batch PR status once for all merge detection
-    let pr_map = gh::batch_pr_status();
+    let branch_names: Vec<&str> = stacks
+        .iter()
+        .flat_map(|s| s.branches.iter().map(|b| b.name.as_str()))
+        .collect();
+    let pr_map = gh::batch_pr_status(&branch_names);
 
     let mut synced_bases = std::collections::HashSet::new();
     let mut branches_to_delete: Vec<String> = Vec::new();

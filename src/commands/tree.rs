@@ -167,7 +167,11 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
 
     // PR status (only when requested)
     let pr_status = if show_pr {
-        gh::batch_pr_status()
+        let branch_names: Vec<&str> = stacks
+            .iter()
+            .flat_map(|s| s.branches.iter().map(|b| b.name.as_str()))
+            .collect();
+        gh::batch_pr_status(&branch_names)
     } else {
         HashMap::new()
     };
