@@ -7,6 +7,8 @@ pub mod mcp_server;
 pub mod mcp_setup;
 pub mod push;
 pub mod rebase;
+pub mod split;
+pub mod split_tui;
 pub mod stack;
 pub mod status;
 pub mod switch;

@@ -31,6 +31,8 @@ pub enum Commands {
     /// Show log of all stacks with branches and commits
     #[command(alias = "tree")]
     Log(TreeArgs),
+    /// Split a branch into a stack of focused branches
+    Split(SplitArgs),
     /// Configure gw settings
     Config(ConfigArgs),
     /// Generate shell completions
@@ -175,6 +177,30 @@ pub struct DiffArgs {
     /// Use regular git diff instead of difftastic
     #[arg(long)]
     pub no_difftastic: bool,
+}
+
+// -- Split --
+
+#[derive(Args)]
+pub struct SplitArgs {
+    /// Plan file mapping commits to branches (non-interactive mode)
+    #[arg(long)]
+    pub plan: Option<String>,
+    /// Base branch to split from (defaults to merge-base detection)
+    #[arg(long)]
+    pub base: Option<String>,
+    /// Stack name for the new stack (defaults to original branch name)
+    #[arg(long)]
+    pub name: Option<String>,
+    /// Skip confirmation prompt
+    #[arg(long)]
+    pub yes: bool,
+    /// Continue after resolving cherry-pick conflicts
+    #[arg(long = "continue", id = "split_continue", conflicts_with = "split_abort")]
+    pub cont: bool,
+    /// Abort the split and clean up created branches
+    #[arg(long = "abort", id = "split_abort", conflicts_with = "split_continue")]
+    pub abort: bool,
 }
 
 // -- Config --

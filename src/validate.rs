@@ -1,5 +1,17 @@
 use anyhow::{bail, Result};
 
+/// Validate a commit SHA is a valid hex string.
+/// Used to prevent injection when SHAs come from user input (plan files, state files).
+pub fn validate_sha(sha: &str) -> Result<()> {
+    if sha.is_empty() {
+        bail!("Commit SHA cannot be empty");
+    }
+    if !sha.chars().all(|c| c.is_ascii_hexdigit()) {
+        bail!("Invalid commit SHA '{sha}': must contain only hex characters");
+    }
+    Ok(())
+}
+
 /// Validate a stack name for filesystem safety and git compatibility.
 /// Stack names are used to construct file paths (.git/gw/stacks/<name>.toml),
 /// so they must not contain path traversal sequences or filesystem-unsafe characters.
@@ -143,6 +155,23 @@ mod tests {
     #[test]
     fn stack_names_with_null_bytes_rejected() {
         assert!(validate_stack_name("bad\0name").is_err());
+    }
+
+    #[test]
+    fn valid_shas() {
+        assert!(validate_sha("abc123").is_ok());
+        assert!(validate_sha("deadbeef").is_ok());
+        assert!(validate_sha("ABC123").is_ok());
+        assert!(validate_sha("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2").is_ok());
+    }
+
+    #[test]
+    fn invalid_shas() {
+        assert!(validate_sha("").is_err());
+        assert!(validate_sha("--exec=bad").is_err());
+        assert!(validate_sha("not-hex!").is_err());
+        assert!(validate_sha("abc 123").is_err());
+        assert!(validate_sha("abc\n123").is_err());
     }
 
     #[test]

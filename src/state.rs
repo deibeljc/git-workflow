@@ -115,6 +115,7 @@ pub enum Operation {
     Sync,
     Adopt,
     BranchRemove,
+    Split,
 }
 
 /// Propagation state tracked in .git/gw/state.toml during multi-branch rebases.
@@ -192,6 +193,106 @@ pub fn save_propagation_state(path: &Path, state: &PropagationState) -> Result<(
 
 /// Remove propagation state file.
 pub fn remove_propagation_state(path: &Path) -> Result<()> {
+    if path.exists() {
+        std::fs::remove_file(path)
+            .with_context(|| format!("failed to remove {}", path.display()))?;
+    }
+    Ok(())
+}
+
+// ============================================================
+// Split state
+// ============================================================
+
+/// A bucket of commits that will become a branch during split.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SplitBucket {
+    pub name: String,
+    pub commits: Vec<String>,
+}
+
+/// State tracked in .git/gw/state.toml during the cherry-pick phase of a split.
+/// Only exists while a split's cherry-pick phase is in progress.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SplitState {
+    pub operation: Operation,
+    pub original_branch: String,
+    pub original_sha: String,
+    pub base_branch: String,
+    pub stack_name: String,
+    /// Branches created so far (for rollback on abort).
+    pub created_branches: Vec<String>,
+    /// Which bucket is currently being processed.
+    pub current_bucket_index: usize,
+    /// Which commit within the current bucket is next.
+    pub current_commit_index: usize,
+    /// The bucket assignments.
+    pub buckets: Vec<SplitBucket>,
+}
+
+impl SplitState {
+    /// Validate all fields after deserialization (defense in depth).
+    pub fn validate(&self) -> Result<()> {
+        crate::validate::validate_branch_name(&self.original_branch)?;
+        crate::validate::validate_sha(&self.original_sha)?;
+        crate::validate::validate_branch_name(&self.base_branch)?;
+        crate::validate::validate_stack_name(&self.stack_name)?;
+        for branch in &self.created_branches {
+            crate::validate::validate_branch_name(branch)?;
+        }
+        for bucket in &self.buckets {
+            crate::validate::validate_branch_name(&bucket.name)?;
+            for sha in &bucket.commits {
+                crate::validate::validate_sha(sha)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Discriminated union for state.toml which can contain either a PropagationState
+/// or a SplitState depending on the active operation.
+pub enum ActiveState {
+    Propagation(PropagationState),
+    Split(SplitState),
+}
+
+/// Load the active state from state.toml, determining the type from the content.
+pub fn load_active_state(path: &Path) -> Result<Option<ActiveState>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read {}", path.display()))?;
+
+    // Parse as raw TOML to check the operation and presence of split-specific fields
+    let raw: toml::Value =
+        toml::from_str(&content).with_context(|| format!("failed to parse {}", path.display()))?;
+
+    let is_split = raw.get("operation").and_then(|v| v.as_str()) == Some("split")
+        && raw.get("buckets").is_some();
+
+    if is_split {
+        let state: SplitState = toml::from_str(&content)
+            .with_context(|| format!("failed to parse split state from {}", path.display()))?;
+        state.validate()?;
+        Ok(Some(ActiveState::Split(state)))
+    } else {
+        let state: PropagationState = toml::from_str(&content)
+            .with_context(|| format!("failed to parse propagation state from {}", path.display()))?;
+        Ok(Some(ActiveState::Propagation(state)))
+    }
+}
+
+/// Save split state atomically.
+pub fn save_split_state(path: &Path, state: &SplitState) -> Result<()> {
+    let content =
+        toml::to_string_pretty(state).context("failed to serialize split state")?;
+    atomic_write(path, &content)
+}
+
+/// Remove state file (works for both split and propagation state).
+pub fn remove_state(path: &Path) -> Result<()> {
     if path.exists() {
         std::fs::remove_file(path)
             .with_context(|| format!("failed to remove {}", path.display()))?;

@@ -51,11 +51,19 @@ You are working in a repo that uses **gw**, a stacked branch manager. Use gw too
 
 When the user has a large change or asks to split work into reviewable pieces:
 
+**If the work hasn't been done yet:**
 1. Create a stack with `gw_stack_create`
 2. Make commits for the first logical unit (e.g., data model changes)
 3. Create the next branch with `gw_branch_create` for the next unit (e.g., API layer)
 4. Repeat until done
 5. Each branch becomes its own PR, stacked on the previous one
+
+**If the work is already on a single branch:**
+1. Use `gw split` to decompose the existing branch into a clean stack
+2. The interactive TUI lets you assign each commit to a named bucket/branch
+3. Or use `gw split --plan <file>` with a plan file for scripting
+4. Cherry-pick conflicts can be resolved with `gw split --continue`
+5. Use `gw split --abort` to roll back if needed
 
 Good stack boundaries: model/schema changes, API/service layer, UI/frontend, tests, migrations. Each branch should be independently reviewable and tell a coherent story.
 

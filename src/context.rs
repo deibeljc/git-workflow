@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::path::PathBuf;
 
 use crate::git::Git;
-use crate::state::{self, GwConfig, PropagationState, StackConfig};
+use crate::state::{self, ActiveState, GwConfig, PropagationState, SplitState, StackConfig};
 
 /// Central context passed to all command handlers.
 /// Bundles the Git instance, resolved gw paths, and provides
@@ -128,6 +128,22 @@ impl Ctx {
     /// Remove propagation state.
     pub fn remove_propagation_state(&self) -> Result<()> {
         state::remove_propagation_state(&self.state_path)
+    }
+
+    /// Load active state (either propagation or split) if it exists.
+    pub fn active_state(&self) -> Result<Option<ActiveState>> {
+        state::load_active_state(&self.state_path)
+    }
+
+    /// Save split state.
+    pub fn save_split_state(&self, ss: &SplitState) -> Result<()> {
+        self.ensure_dirs()?;
+        state::save_split_state(&self.state_path, ss)
+    }
+
+    /// Remove state file (works for both propagation and split state).
+    pub fn remove_state(&self) -> Result<()> {
+        state::remove_state(&self.state_path)
     }
 
     /// Load gw config (returns defaults if no config file exists).

@@ -15,6 +15,7 @@ Everything lives in `.git/gw/` and never gets pushed to the remote.
 - [Why this exists](#why-this-exists)
 - [Install](#install)
 - [Quick start](#quick-start)
+- [Already have a fat branch? Split it](#already-have-a-fat-branch-split-it)
 - [Already have branches? Adopt them](#already-have-branches-adopt-them)
 - [Configuration](#configuration)
 - [Commands](#commands)
@@ -129,6 +130,32 @@ gw sync --rebase
 gw switch
 ```
 
+## Already have a fat branch? Split it
+
+If you've got a single branch with a bunch of commits that should really be separate PRs, `gw split` decomposes it into a clean stack:
+
+```bash
+gw split
+```
+
+An interactive TUI lets you assign each commit to a named bucket. When you confirm, gw cherry-picks the commits into new branches forming a linear stack. The original branch is kept as a backup.
+
+You can also use a plan file for scripting:
+
+```bash
+gw split --plan split-plan.txt --base main
+```
+
+Plan file format:
+```
+pick <full-sha> auth
+pick <full-sha> auth
+pick <full-sha> dashboard
+pick <full-sha> dashboard
+```
+
+If a cherry-pick hits a conflict, resolve it and run `gw split --continue`. To undo everything: `gw split --abort`.
+
 ## Already have branches? Adopt them
 
 If you've already got a chain of branches you've been managing by hand, you don't need to recreate anything. Just tell gw about them:
@@ -169,6 +196,10 @@ gw config set-delete-on-merge true
 | `gw branch create <name>` | Add a branch to the current stack |
 | `gw branch remove <name>` | Remove a branch and re-parent children |
 | `gw adopt <branches...>` | Adopt existing branches into a stack |
+| `gw split` | Interactively split a branch into a stack |
+| `gw split --plan <file>` | Split using a plan file |
+| `gw split --continue` | Resume after resolving cherry-pick conflicts |
+| `gw split --abort` | Roll back split and delete created branches |
 | `gw rebase` | Propagate rebases to descendants |
 | `gw rebase --continue` | Resume after resolving conflicts |
 | `gw rebase --abort` | Roll back all branches |

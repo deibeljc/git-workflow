@@ -11,6 +11,24 @@ pub enum RebaseResult {
     Conflict,
 }
 
+/// Result of a git cherry-pick operation.
+pub enum CherryPickResult {
+    /// Cherry-pick completed successfully.
+    Success,
+    /// Cherry-pick paused due to a conflict.
+    Conflict,
+}
+
+/// Information about a commit from git log.
+pub struct CommitInfo {
+    /// Full 40-character SHA.
+    pub full_sha: String,
+    /// Commit subject line.
+    pub subject: String,
+    /// Number of parents (>1 means merge commit).
+    pub parent_count: usize,
+}
+
 /// Wrapper around git CLI operations.
 ///
 /// All git interactions go through this struct. It uses `std::process::Command`
@@ -349,6 +367,98 @@ impl Git {
             "git stash pop failed: {}",
             stderr.trim()
         ))
+    }
+
+    /// Cherry-pick a single commit onto the current branch.
+    /// Returns Success or Conflict (never errors on conflict).
+    pub fn cherry_pick(&self, sha: &str) -> Result<CherryPickResult> {
+        let output = self.run_raw(&["cherry-pick", sha])?;
+
+        if output.status.success() {
+            return Ok(CherryPickResult::Success);
+        }
+
+        // Check for conflict state
+        if self.is_cherry_pick_in_progress() {
+            return Ok(CherryPickResult::Conflict);
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(anyhow!("git cherry-pick failed: {}", stderr.trim()))
+    }
+
+    /// Continue an in-progress cherry-pick.
+    pub fn cherry_pick_continue(&self) -> Result<CherryPickResult> {
+        let output = self.run_raw(&["cherry-pick", "--continue"])?;
+
+        if output.status.success() {
+            return Ok(CherryPickResult::Success);
+        }
+
+        if self.is_cherry_pick_in_progress() {
+            return Ok(CherryPickResult::Conflict);
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(anyhow!(
+            "git cherry-pick --continue failed: {}",
+            stderr.trim()
+        ))
+    }
+
+    /// Abort an in-progress cherry-pick.
+    pub fn cherry_pick_abort(&self) -> Result<()> {
+        if self.is_cherry_pick_in_progress() {
+            self.run(&["cherry-pick", "--abort"])?;
+        }
+        Ok(())
+    }
+
+    /// Check if a git cherry-pick is currently in progress.
+    pub fn is_cherry_pick_in_progress(&self) -> bool {
+        self.repo_path.join(".git").join("CHERRY_PICK_HEAD").exists()
+    }
+
+    /// Delete a local branch (force).
+    pub fn delete_branch(&self, name: &str) -> Result<()> {
+        self.run(&["branch", "-D", name])?;
+        Ok(())
+    }
+
+    /// Get commits between base and head with full SHAs and parent info.
+    /// Returns commits in chronological order (oldest first).
+    /// Combines log + merge commit detection in a single git call.
+    pub fn log_commits(&self, base: &str, head: &str) -> Result<Vec<CommitInfo>> {
+        // %H = full SHA, %P = parent SHAs (space-separated), %s = subject
+        let output = self.run(&[
+            "log",
+            "--reverse",
+            "--format=%H|%P|%s",
+            &format!("{base}..{head}"),
+        ])?;
+        if output.is_empty() {
+            return Ok(vec![]);
+        }
+        Ok(output
+            .lines()
+            .map(|line| {
+                // Split on first two '|' characters
+                let mut parts = line.splitn(3, '|');
+                let full_sha = parts.next().unwrap_or("").to_string();
+                let parents = parts.next().unwrap_or("");
+                let subject = parts.next().unwrap_or("").to_string();
+                let parent_count = if parents.is_empty() {
+                    0
+                } else {
+                    parents.split(' ').count()
+                };
+                CommitInfo {
+                    full_sha,
+                    subject,
+                    parent_count,
+                }
+            })
+            .collect())
     }
 
     /// Atomically update multiple refs using git update-ref --stdin.

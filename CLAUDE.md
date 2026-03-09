@@ -46,6 +46,14 @@ gw switch                       # interactive picker
 gw switch <branch-name>         # direct checkout
 ```
 
+### Splitting a fat branch into a stack
+```bash
+gw split                        # interactive TUI to assign commits to buckets
+gw split --plan plan.txt        # non-interactive, reads from plan file
+gw split --continue             # resume after resolving cherry-pick conflicts
+gw split --abort                # roll back, delete created branches
+```
+
 ### Adopting existing branches
 ```bash
 gw adopt branch-a branch-b branch-c --base main
@@ -53,7 +61,7 @@ gw adopt branch-a branch-b branch-c --base main
 
 ## Conflict Resolution
 
-If `gw rebase` or `gw sync` hits a conflict:
+If `gw rebase`, `gw sync`, or `gw split` hits a conflict:
 ```bash
 # resolve conflicts in your editor
 git add <resolved files>
@@ -62,7 +70,7 @@ gw rebase --continue            # resumes the cascade
 gw rebase --abort               # rolls back ALL branches to pre-rebase state
 ```
 
-Most commands are blocked during a propagation. Only `gw tree` and `gw switch` work.
+Most commands are blocked during a propagation or split. Only `gw tree`, `gw switch`, `gw status`, and `gw diff` work.
 
 ## Important Notes
 
@@ -82,7 +90,7 @@ cargo install --path .          # install to ~/.cargo/bin/gw
 ## Architecture
 
 - `src/cli.rs` - clap derive CLI definitions
-- `src/commands/` - one file per command (stack, branch, adopt, rebase, sync, push, switch, tree, config, completions)
+- `src/commands/` - one file per command (stack, branch, adopt, rebase, sync, push, switch, split, tree, config, completions)
 - `src/git.rs` - git CLI wrapper (all git operations go through here)
 - `src/propagation.rs` - shared rebase cascade engine
 - `src/state.rs` - TOML serialization for stack configs and propagation state

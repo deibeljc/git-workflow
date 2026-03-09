@@ -30,28 +30,61 @@ fn main() -> Result<()> {
 
     let ctx = Ctx::discover()?;
 
-    // State guard: block most commands if a propagation is in progress
-    if let Some(ref prop_state) = ctx.propagation_state()? {
-        let allowed = matches!(
-            &command,
-            Commands::Rebase(args) if args.cont || args.abort
-        ) || matches!(&command, Commands::Log(_))
-            || matches!(&command, Commands::Switch(_))
-            || matches!(&command, Commands::Status)
-            || matches!(&command, Commands::Diff(_));
+    // State guard: block most commands if a propagation or split is in progress
+    if let Some(ref active) = ctx.active_state()? {
+        match active {
+            state::ActiveState::Propagation(prop_state) => {
+                let is_split_op = prop_state.operation == state::Operation::Split;
+                let allowed = matches!(
+                    &command,
+                    Commands::Rebase(args) if args.cont || args.abort
+                ) || matches!(
+                    &command,
+                    Commands::Split(args) if (args.cont || args.abort) && is_split_op
+                ) || matches!(&command, Commands::Log(_))
+                    || matches!(&command, Commands::Switch(_))
+                    || matches!(&command, Commands::Status)
+                    || matches!(&command, Commands::Diff(_));
 
-        if !allowed {
-            let op = match prop_state.operation {
-                state::Operation::Rebase => "rebase",
-                state::Operation::Sync => "sync",
-                state::Operation::Adopt => "adopt",
-                state::Operation::BranchRemove => "branch remove",
-            };
-            bail!(
-                "A {op} propagation is in progress on stack '{}'.\n\
-                 Run `gw rebase --continue` or `gw rebase --abort` first.",
-                prop_state.stack
-            );
+                if !allowed {
+                    if is_split_op {
+                        bail!(
+                            "A split propagation is in progress on stack '{}'.\n\
+                             Run `gw split --continue` or `gw split --abort` first.",
+                            prop_state.stack
+                        );
+                    }
+                    let op = match prop_state.operation {
+                        state::Operation::Rebase => "rebase",
+                        state::Operation::Sync => "sync",
+                        state::Operation::Adopt => "adopt",
+                        state::Operation::BranchRemove => "branch remove",
+                        state::Operation::Split => unreachable!(),
+                    };
+                    bail!(
+                        "A {op} propagation is in progress on stack '{}'.\n\
+                         Run `gw rebase --continue` or `gw rebase --abort` first.",
+                        prop_state.stack
+                    );
+                }
+            }
+            state::ActiveState::Split(split_state) => {
+                let allowed = matches!(
+                    &command,
+                    Commands::Split(args) if args.cont || args.abort
+                ) || matches!(&command, Commands::Log(_))
+                    || matches!(&command, Commands::Switch(_))
+                    || matches!(&command, Commands::Status)
+                    || matches!(&command, Commands::Diff(_));
+
+                if !allowed {
+                    bail!(
+                        "A split is in progress on branch '{}'.\n\
+                         Run `gw split --continue` or `gw split --abort` first.",
+                        split_state.original_branch
+                    );
+                }
+            }
         }
     }
 
@@ -66,6 +99,7 @@ fn main() -> Result<()> {
         Commands::Push(args) => commands::push::run(args, &ctx),
         Commands::Switch(args) => commands::switch::run(args.branch, &ctx),
         Commands::Log(args) => commands::tree::run(&ctx, args.pr),
+        Commands::Split(args) => commands::split::run(args, &ctx),
         Commands::Config(args) => commands::config::run(args.command, &ctx),
         Commands::Completions(_) | Commands::McpSetup | Commands::McpServer => unreachable!(),
     }
