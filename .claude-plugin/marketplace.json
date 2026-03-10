@@ -9,7 +9,7 @@
     {
       "name": "gw",
       "description": "Stacked branch management for Claude Code. Teaches Claude to use gw for branch creation, pushing, rebasing, and syncing instead of raw git commands. Includes MCP tools for direct stack manipulation.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Jon Deibel"
       },

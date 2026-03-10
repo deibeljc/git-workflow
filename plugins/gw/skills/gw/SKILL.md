@@ -1,14 +1,16 @@
 ---
 name: gw
 description: >
-  Guides Claude to use gw (Git Workflow) for all branch and stack management
-  instead of raw git commands. Automatically applies when doing git operations
-  like committing, branching, pushing, creating PRs, or organizing work into
-  reviewable chunks.
-  TRIGGER when: user asks to commit, push, create a branch, create a PR, break
-  work into pieces, rebase, sync with main, or any git workflow operation.
-  DO NOT TRIGGER when: reading files, running tests, editing code with no git
-  intent.
+  Detailed reference for gw stacked branch workflows: splitting branches,
+  resolving rebase/split conflicts, creating stacked PRs, and advanced
+  stack management. Use when the task involves splitting a branch into a
+  stack, handling rebase conflicts, creating multiple stacked PRs, or
+  planning how to decompose work into stacked branches.
+  TRIGGER when: user asks to split a branch, resolve rebase conflicts,
+  create stacked PRs, break work into reviewable pieces, or needs
+  detailed guidance on gw workflows.
+  DO NOT TRIGGER when: simple commit, push, single PR creation, branch
+  switching, or basic git operations (the plugin CLAUDE.md handles those).
 allowed-tools: Bash, Read, Edit, Write, Glob, Grep, mcp__gw__gw_stack_create, mcp__gw__gw_stack_list, mcp__gw__gw_stack_delete, mcp__gw__gw_branch_create, mcp__gw__gw_branch_remove, mcp__gw__gw_log, mcp__gw__gw_log_pr, mcp__gw__gw_push, mcp__gw__gw_force_push, mcp__gw__gw_rebase, mcp__gw__gw_rebase_continue, mcp__gw__gw_rebase_abort, mcp__gw__gw_sync, mcp__gw__gw_sync_rebase, mcp__gw__gw_sync_merged, mcp__gw__gw_switch, mcp__gw__gw_split, mcp__gw__gw_split_continue, mcp__gw__gw_split_abort, mcp__github__create_pull_request
 ---
 
