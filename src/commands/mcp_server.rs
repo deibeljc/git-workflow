@@ -47,8 +47,13 @@ impl GwServer {
         #[tool(param)]
         #[schemars(description = "Name for the stack")]
         name: String,
+        #[tool(param)]
+        #[schemars(description = "Root branch name (defaults to the stack name)")]
+        branch: Option<String>,
     ) -> String {
-        gw(&["stack", "create", &name]).unwrap_or_else(|e| format!("{e}"))
+        let branch_name = branch.unwrap_or_else(|| name.clone());
+        gw(&["stack", "create", &name, "--branch", &branch_name])
+            .unwrap_or_else(|e| format!("{e}"))
     }
 
     #[tool(description = "Delete a stack (branches are NOT deleted)")]

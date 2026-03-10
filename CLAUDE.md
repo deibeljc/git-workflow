@@ -14,7 +14,8 @@ This repo contains `gw`, a CLI tool for managing stacked branches with GitHub's 
 
 ### Creating a stack and adding branches
 ```bash
-gw stack create <name>          # creates stack + root branch, checks it out
+gw stack create <name>          # creates stack, prompts for root branch name
+gw stack create <name> --branch <branch>  # creates stack with specific root branch
 # ... do work, commit ...
 gw branch create <next-branch>  # adds child branch, checks it out
 # ... do work, commit ...

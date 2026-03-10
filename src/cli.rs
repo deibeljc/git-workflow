@@ -62,8 +62,11 @@ pub struct StackArgs {
 pub enum StackCommands {
     /// Create a new stack
     Create {
-        /// Name for the stack (also creates a branch with this name)
+        /// Name for the stack
         name: String,
+        /// Root branch name (prompts interactively if omitted)
+        #[arg(long)]
+        branch: Option<String>,
         /// Base branch to stack off of (defaults to current branch)
         #[arg(long)]
         base: Option<String>,

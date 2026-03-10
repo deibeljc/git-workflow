@@ -51,6 +51,40 @@ pub fn error(msg: &str) {
     eprintln!("{}", msg.red());
 }
 
+/// Prompt the user for text input with an optional default value.
+/// In non-interactive mode (stdin is not a TTY), returns the default if provided,
+/// otherwise returns an error.
+pub fn prompt(message: &str, default: Option<&str>) -> io::Result<String> {
+    if !atty_check() {
+        return match default {
+            Some(d) => Ok(d.to_string()),
+            None => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "non-interactive mode and no default provided",
+            )),
+        };
+    }
+
+    match default {
+        Some(d) => print!("{message} [{d}]: "),
+        None => print!("{message}: "),
+    }
+    io::stdout().flush().ok();
+
+    let mut input = String::new();
+    io::stdin().lock().read_line(&mut input)?;
+
+    let input = input.trim();
+    if input.is_empty() {
+        match default {
+            Some(d) => Ok(d.to_string()),
+            None => Ok(String::new()),
+        }
+    } else {
+        Ok(input.to_string())
+    }
+}
+
 /// Print an info message.
 pub fn info(msg: &str) {
     println!("{msg}");

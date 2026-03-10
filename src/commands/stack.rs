@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 
 use crate::cli::StackCommands;
 use crate::context::Ctx;
@@ -8,23 +8,40 @@ use crate::ui;
 
 pub fn run(cmd: StackCommands, ctx: &Ctx) -> Result<()> {
     match cmd {
-        StackCommands::Create { name, base } => create(ctx, &name, base.as_deref()),
+        StackCommands::Create {
+            name,
+            branch,
+            base,
+        } => create(ctx, &name, branch.as_deref(), base.as_deref()),
         StackCommands::Delete { name } => delete(ctx, &name),
         StackCommands::List => list(ctx),
     }
 }
 
-fn create(ctx: &Ctx, name: &str, base: Option<&str>) -> Result<()> {
+fn create(ctx: &Ctx, name: &str, branch: Option<&str>, base: Option<&str>) -> Result<()> {
     validate::validate_stack_name(name)?;
-    validate::validate_branch_name(name)?; // name is also used as branch name
 
     if ctx.stack_exists(name) {
         bail!("Stack '{name}' already exists. Use `gw stack delete {name}` first.");
     }
 
-    if ctx.git.branch_exists(name)? {
+    let branch_name = match branch {
+        Some(b) => b.to_string(),
+        None => {
+            let input = ui::prompt("Root branch name", Some(name))
+                .context("Failed to read branch name")?;
+            if input.is_empty() {
+                bail!("Branch name cannot be empty.");
+            }
+            input
+        }
+    };
+
+    validate::validate_branch_name(&branch_name)?;
+
+    if ctx.git.branch_exists(&branch_name)? {
         bail!(
-            "Branch '{name}' already exists. Use `gw adopt {name}` to track it, or choose a different name."
+            "Branch '{branch_name}' already exists. Use `gw adopt {branch_name}` to track it, or choose a different name."
         );
     }
 
@@ -34,25 +51,27 @@ fn create(ctx: &Ctx, name: &str, base: Option<&str>) -> Result<()> {
     };
 
     let head = ctx.git.rev_parse(&format!("refs/heads/{base_branch}"))?;
-    ctx.git.create_branch(name, &head)?;
+    ctx.git.create_branch(&branch_name, &head)?;
 
     let config = StackConfig {
         name: name.to_string(),
         base_branch,
         branches: vec![BranchEntry {
-            name: name.to_string(),
+            name: branch_name.clone(),
         }],
     };
 
     ctx.save_stack(&config)?;
-    ctx.git.checkout(name)?;
+    ctx.git.checkout(&branch_name)?;
 
     let short_sha = &head[..7.min(head.len())];
     ui::success(&format!(
         "Created stack '{}' off {} @ {}",
         config.name, config.base_branch, short_sha
     ));
-    ui::info(&format!("Created and checked out branch '{name}' (root)"));
+    ui::info(&format!(
+        "Created and checked out branch '{branch_name}' (root)"
+    ));
 
     Ok(())
 }
