@@ -73,7 +73,7 @@ _gw() {
             subcmd) _describe 'subcommand' stack_commands ;;
             stack_args)
               case $words[1] in
-                create) _arguments '1:name:' '--base[Base branch]:branch:_gw_branches' ;;
+                create) _arguments '1:name:' '--branch[Root branch name]:branch:_gw_branches' '--base[Base branch]:branch:_gw_branches' ;;
                 delete) _arguments '1:name:_gw_stacks' ;;
               esac
               ;;
@@ -206,10 +206,10 @@ _gw() {
         case "${words[2]}" in
           delete) COMPREPLY=($(compgen -W "$(_gw_stacks)" -- "$cur")) ;;
           create)
-            if [[ "$prev" == "--base" ]]; then
+            if [[ "$prev" == "--base" || "$prev" == "--branch" ]]; then
               COMPREPLY=($(compgen -W "$(_gw_branches)" -- "$cur"))
             else
-              COMPREPLY=($(compgen -W "--base" -- "$cur"))
+              COMPREPLY=($(compgen -W "--base --branch" -- "$cur"))
             fi
             ;;
         esac
@@ -333,6 +333,7 @@ complete -c gw -f -n '__gw_using_command stack' -a create -d 'Create a new stack
 complete -c gw -f -n '__gw_using_command stack' -a delete -d 'Delete a stack'
 complete -c gw -f -n '__gw_using_command stack' -a list -d 'List all stacks'
 complete -c gw -f -n '__gw_using_subcommand stack delete' -a '(__gw_stacks)'
+complete -c gw -f -n '__gw_using_subcommand stack create' -l branch -d 'Root branch name' -ra '(__gw_branches)'
 complete -c gw -f -n '__gw_using_subcommand stack create' -l base -d 'Base branch' -ra '(__gw_branches)'
 
 # branch subcommands

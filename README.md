@@ -32,7 +32,7 @@ There's also the force push problem. Most stacking tools auto-rebase your entire
 
 **ghstack** rewrites your branches into synthetic ones for GitHub to display as individual PRs. What's on your machine doesn't match what's on GitHub, and that gets confusing when you're debugging a rebase or a PR diff doesn't look like what you see locally.
 
-**git-branchless** Is close but I found the squash merge detection falls over most of the time, which leaves you doing the manual cleanup work anyways. It's also a different mental model entirely, inspired by Mercurial and Phabricator, and if your team already does one-branch-per-PR with squash merges that abstraction doesn't map cleanly.
+**git-branchless** is close to what you want but the squash merge detection falls over most of the time, which leaves you doing the manual cleanup work anyways. It's also a different mental model entirely, inspired by Mercurial and Phabricator, and if your team already does one-branch-per-PR with squash merges that abstraction doesn't map cleanly.
 
 ### What gw does
 
@@ -105,8 +105,11 @@ If you'd rather just get the MCP tools without the plugin system, run `gw mcp-se
 # Set your base branch (if not main)
 gw config set-base dev
 
-# Create a stack
+# Create a stack (prompts for root branch name, defaults to stack name)
 gw stack create auth
+
+# Or specify the branch name directly
+gw stack create auth --branch auth-login
 
 # Do work, commit, then add the next branch
 gw branch create auth-tests
@@ -190,7 +193,8 @@ gw config set-delete-on-merge true
 | `gw` | Show all stacks (alias for `gw log`) |
 | `gw log` | Show all stacks with branches and commits |
 | `gw log --pr` | Include PR status from GitHub |
-| `gw stack create <name>` | Create a new stack off the base branch |
+| `gw stack create <name>` | Create a new stack (prompts for root branch name) |
+| `gw stack create <name> --branch <branch>` | Create a new stack with a specific root branch name |
 | `gw stack delete <name>` | Remove stack metadata (branches stay) |
 | `gw stack list` | List all stacks |
 | `gw branch create <name>` | Add a branch to the current stack |
