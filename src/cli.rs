@@ -172,6 +172,9 @@ pub struct TreeArgs {
     /// Show PR status from GitHub (requires gh CLI, adds latency)
     #[arg(long)]
     pub pr: bool,
+    /// Disable pager, print directly to stdout
+    #[arg(long)]
+    pub no_pager: bool,
 }
 
 // -- Diff --

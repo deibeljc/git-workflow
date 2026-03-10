@@ -13,7 +13,7 @@ fn main() -> Result<()> {
         Some(cmd) => cmd,
         None => {
             let ctx = Ctx::discover()?;
-            return commands::tree::run(&ctx, cli.pr);
+            return commands::tree::run(&ctx, cli.pr, false);
         }
     };
 
@@ -98,7 +98,7 @@ fn main() -> Result<()> {
         Commands::Sync(args) => commands::sync::run(args, &ctx),
         Commands::Push(args) => commands::push::run(args, &ctx),
         Commands::Switch(args) => commands::switch::run(args.branch, &ctx),
-        Commands::Log(args) => commands::tree::run(&ctx, args.pr),
+        Commands::Log(args) => commands::tree::run(&ctx, args.pr, args.no_pager),
         Commands::Split(args) => commands::split::run(args, &ctx),
         Commands::Config(args) => commands::config::run(args.command, &ctx),
         Commands::Completions(_) | Commands::McpSetup | Commands::McpServer => unreachable!(),

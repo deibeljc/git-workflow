@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::process::Child;
 
 use anyhow::Result;
@@ -9,7 +10,7 @@ use crate::gh;
 use crate::git::Git;
 use crate::ui;
 
-pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
+pub fn run(ctx: &Ctx, show_pr: bool, no_pager: bool) -> Result<()> {
     let stacks = ctx.load_all_stacks()?;
 
     if stacks.is_empty() {
@@ -176,9 +177,10 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
         HashMap::new()
     };
 
-    // === Render ===
-    let mut total_lines = 0;
-    let mut branch_positions: HashMap<String, usize> = HashMap::new();
+    // === Render to buffer ===
+    let mut buf = String::new();
+    let mut current_branch_line: Option<usize> = None;
+    let mut line_num: usize = 0;
 
     for (base, stack_indices) in &by_base {
         let max_behind = stack_indices
@@ -201,8 +203,8 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
             String::new()
         };
 
-        println!("{} {}{behind_tag}", "◇".cyan(), base.cyan().bold());
-        total_lines += 1;
+        let _ = writeln!(buf, "{} {}{behind_tag}", "◇".cyan(), base.cyan().bold());
+        line_num += 1;
 
         let total_stacks = stack_indices.len();
         for (si, &stack_idx) in stack_indices.iter().enumerate() {
@@ -226,13 +228,14 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
                 format!("  {}", stack_tags.join("  "))
             };
 
-            println!(
+            let _ = writeln!(
+                buf,
                 "{} {}{}",
                 stack_fork.dimmed(),
                 stack.name.magenta().bold(),
                 stack_tag_str
             );
-            total_lines += 1;
+            line_num += 1;
 
             for (idx, branch) in stack.branches.iter().enumerate() {
                 let is_last_branch = idx == branch_count - 1;
@@ -251,16 +254,19 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
                     exists,
                     info,
                     is_last_branch,
-                    None,
+                    pr_status.get(&branch.name),
                     stale,
                 );
-                println!("{}{}", stack_pipe.dimmed(), line);
-                branch_positions.insert(branch.name.clone(), total_lines);
-                total_lines += 1;
+                let _ = writeln!(buf, "{}{}", stack_pipe.dimmed(), line);
+                line_num += 1;
+                if is_current {
+                    current_branch_line = Some(line_num);
+                }
 
                 if let Some(commits) = commit_cache.get(&branch.name) {
                     for (sha, subject) in commits {
-                        println!(
+                        let _ = writeln!(
+                            buf,
                             "{}{}{} {} {}",
                             stack_pipe.dimmed(),
                             branch_pipe.dimmed(),
@@ -268,54 +274,14 @@ pub fn run(ctx: &Ctx, show_pr: bool) -> Result<()> {
                             sha.yellow(),
                             subject.dimmed()
                         );
-                        total_lines += 1;
+                        line_num += 1;
                     }
                 }
             }
         }
     }
 
-    // Retroactive PR update
-    if show_pr && !pr_status.is_empty() {
-        for (_, stack_indices) in &by_base {
-            for &stack_idx in stack_indices {
-                let stack = &stacks[stack_idx];
-                let branch_count = stack.branches.len();
-                let is_last_stack = stack_indices.last() == Some(&stack_idx);
-                let stack_pipe = if is_last_stack { "   " } else { "│  " };
-
-                for (idx, branch) in stack.branches.iter().enumerate() {
-                    if let Some(pr) = pr_status.get(&branch.name) {
-                        if let Some(&line_pos) = branch_positions.get(&branch.name) {
-                            let is_last_branch = idx == branch_count - 1;
-                            let is_current = branch.name == current_branch;
-                            let is_root = idx == 0;
-                            let info = ref_info.get(&branch.name);
-                            let exists = info.is_some();
-
-                            let lines_up = total_lines - line_pos;
-                            let stale =
-                                needs_rebase.get(&branch.name).copied().unwrap_or(false);
-                            let new_line = format_branch_line(
-                                &branch.name,
-                                is_current,
-                                is_root,
-                                exists,
-                                info,
-                                is_last_branch,
-                                Some(pr),
-                                stale,
-                            );
-                            print!(
-                                "\x1b[{lines_up}A\r\x1b[2K{}{new_line}\x1b[{lines_up}B\r",
-                                stack_pipe.dimmed()
-                            );
-                        }
-                    }
-                }
-            }
-        }
-    }
+    ui::output_with_pager(&buf, no_pager, current_branch_line);
 
     Ok(())
 }

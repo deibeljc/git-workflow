@@ -130,7 +130,7 @@ _gw() {
             '--no-difftastic[Use regular git diff]'
           ;;
         log|tree)
-          _arguments '--pr[Show PR status]'
+          _arguments '--pr[Show PR status]' '--no-pager[Disable pager]'
           ;;
         split)
           _arguments \
@@ -253,7 +253,7 @@ _gw() {
       COMPREPLY=($(compgen -W "--stat --no-difftastic" -- "$cur"))
       ;;
     log|tree)
-      COMPREPLY=($(compgen -W "--pr" -- "$cur"))
+      COMPREPLY=($(compgen -W "--pr --no-pager" -- "$cur"))
       ;;
     split)
       if [[ "$prev" == "--plan" ]]; then
@@ -368,6 +368,7 @@ complete -c gw -f -n '__gw_using_command diff' -l no-difftastic -d 'Use regular 
 
 # tree
 complete -c gw -f -n '__gw_using_command log' -l pr -d 'Show PR status'
+complete -c gw -f -n '__gw_using_command log' -l no-pager -d 'Disable pager'
 complete -c gw -f -n '__gw_using_command tree' -l pr -d 'Show PR status'
 
 # split
